@@ -1,3 +1,8 @@
+import unittest
+import errno
+import os
+import shutil
+
 import sqlalchemy as sa
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, ForeignKeyConstraint
 from sqlalchemy.orm import relationship, backref, attributes
@@ -36,7 +41,69 @@ class Rel(Base):
 		self.test2=test2
 		self.test1=test1
 
+class BaseSessionTest(unittest.TestCase):
+	test_dir = 'unittest_repo'
+	def setUp(self):
+		self.Base = sqlalchemy.ext.declarative.declarative_base()
+		os.makedirs(self.test_dir)
+		sp.check_call(['git', 'init'], cwd=self.test_dir)
+	def check_repository(self, repo_data):
+		def check_directory(directory, data):
+			files = os.listdir(directory)
+			files = [f for f in files if not f in ['.git', 'test.db']]
+			files = set(files)
+			needed_files = set(data.keys())
+			self.assertEqual(needed_files, files)
+			for f in data:
+				if isinstance(data[f], dict):
+					check_directory(os.path.join(directory, f), data[f])
+				elif data[f] is not None:
+					self.assertEqual(open(os.path.join(directory, f)).read(), data[f])
+		check_directory(self.test_dir, repo_data)
+	def initSession(self):
+		try:
+			os.remove('test.db')
+		except OSError as e:
+			if not e.errno == errno.ENOENT:
+				raise
+		dbengine = 'sqlite'
+		enginepath = '{engine}:///{databasename}'.format(engine=dbengine, databasename = '{0}/test.db'.format(self.test_dir))
+		engine = sqlalchemy.create_engine(enginepath, echo=False)
+		self.Base.metadata.create_all(engine)
+		Session = sqlalchemy.orm.sessionmaker(bind=engine)
+		self.session = Session()
+		self.GitDBSession = GitDBSession(self.session, self.test_dir)
+		
+	def tearDown(self):
+		try:
+			shutil.rmtree(self.test_dir)
+			os.remove
+		except OSError as e:
+			if not e.errno == errno.ENOENT:
+				raise
+	def test_init_session(self):
+		class Test(self.Base):
+			__tablename__ = 'test'
+			id = Column(Integer, primary_key = True)
+			foo = Column(String)
+		self.initSession()
+		self.check_repository({})
+	def test_add_object(self):
+		class Test(self.Base):
+			__tablename__ = 'test'
+			id = Column(Integer, primary_key = True)
+			foo = Column(String)
+		self.initSession()
+		test = Test()
+		test.foo = 'probe'
+		self.session.add(test)
+		self.session.commit()
+		self.check_repository({'test': {'1.txt': "id: 1\nfoo: probe\n"}})
+
 if __name__ == '__main__':
+    unittest.main(verbosity=2)
+   
+if False:#__name__ == '__main__':
 	if True:#session is None:
 		import os
 		if os.path.exists('test.db'):
@@ -49,94 +116,7 @@ if __name__ == '__main__':
 		Session = sqlalchemy.orm.sessionmaker(bind=engine)
 		session = Session()
 		gitdbSession = GitDBSession(session, 'test')
-	def gitify_filename(filename):
-		return filename.replace('test/', '')
-	def getFilename(obj, old=True):
-		old_primary_keys = []
-		primary_keys = []
-		for name in obj.__mapper__.columns.keys():
-			col = obj.__mapper__.columns[name]
-			if col.primary_key:
-				history = attributes.get_history(obj, name)
-				#print history
-				if not history.deleted or history.deleted[0] == None:
-					old_primary_keys.append(str(getattr(obj, name)))
-				else:
-					old_primary_keys.append(str(history.deleted[0]))
-				primary_keys.append(str(getattr(obj, name)))
-		oldprimarykey = ','.join(old_primary_keys)
-		primarykey = ','.join(primary_keys)
-		filename = 'test/{0}/{1}.txt'.format(obj.__tablename__, primarykey)
-		oldfilename = 'test/{0}/{1}.txt'.format(obj.__tablename__, oldprimarykey)
-		if old:
-			return filename, oldfilename
-		else:
-			return filename
-	def writeObject(obj):
-		filename, oldfilename = getFilename(obj, old=True)
-		if oldfilename!=filename:
-			print "Primarykey changed from {0} to {1}!".format(oldfilename, filename)
-			sp.check_call(['git', 'mv', gitify_filename(oldfilename), gitify_filename(filename)], cwd='test')
-		try:
-			os.makedirs(os.path.dirname(filename))
-		except:
-			pass
-		with open(filename, 'w') as outfile:
-			for name in obj.__mapper__.columns.keys():
-				col_name = obj.__mapper__.columns[name].name
-				line = '{0}: {1}\n'.format(col_name, getattr(obj, name))
-				print line
-				outfile.write(line)
-		print filename
-		sp.check_call(['git', 'add', gitify_filename(filename)], cwd='test')
-	def deleteObject(obj):
-		print "DELETE"
-		filename, oldfilename = getFilename(obj, old=True)
-		sp.check_call(['git', 'rm', gitify_filename(oldfilename)], cwd='test')
-	def my_after_commit(session):
-		global deleted
-		deleted = []
-		print "after commit!"
-		print "New", session.new
-		print "Dirty", session.dirty
-		print "Deleted", session.deleted
-		
-		sp.check_call(['git', 'commit', '-m', 'somemessage'], cwd='test')
-	def my_after_flush(session, flush_context):
-		global deleted
-		print "After Flush!"
-		print "New", session.new
-		print "Dirty", session.dirty
-		print "Deleted", session.deleted
-		for obj in session.deleted:
-			deleteObject(obj)
-		for obj in session.dirty:
-			if obj in deleted:
-				deleteObject(obj)
-		for obj in session.dirty:
-			if obj not in deleted:
-				writeObject(obj)
-		for obj in session.new:
-			writeObject(obj)
 
-	def my_after_flush_postexp(session, flush_context):
-		global deleted
-		print "After Flush!"
-		print "New", session.new
-		print "Dirty", session.dirty
-		print "Deleted", session.deleted
-		for obj in session.deleted:
-			deleteObject(obj)
-		for obj in session.dirty:
-			if obj in deleted:
-				deleteObject(obj)
-		for obj in session.dirty:
-			if obj not in deleted:
-				writeObject(obj)
-		for obj in session.new:
-			writeObject(obj)
-
-		
 
 	#event.listen(Session, "after_flush", my_after_flush)
 	#event.listen(Session, "after_flush_postexec", my_after_flush)
