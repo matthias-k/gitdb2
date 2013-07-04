@@ -99,6 +99,47 @@ class BaseSessionTest(unittest.TestCase):
 		self.session.add(test)
 		self.session.commit()
 		self.check_repository({'test': {'1.txt': "id: 1\nfoo: probe\n"}})
+	def test_change_object(self):
+		class Test(self.Base):
+			__tablename__ = 'test'
+			id = Column(Integer, primary_key = True)
+			foo = Column(String)
+		self.initSession()
+		test = Test()
+		test.foo = 'probe'
+		self.session.add(test)
+		self.session.commit()
+		self.check_repository({'test': {'1.txt': "id: 1\nfoo: probe\n"}})
+		test.foo = 'probe2'
+		self.session.commit()
+		self.check_repository({'test': {'1.txt': "id: 1\nfoo: probe2\n"}})
+	def test_multiple_primary_keys(self):
+		class Test(self.Base):
+			__tablename__ = 'test'
+			id1 = Column(Integer, primary_key = True)
+			id2 = Column(Integer, primary_key = True)
+		self.initSession()
+		test = Test()
+		test.id1 = 10
+		test.id2 = 20
+		self.session.add(test)
+		self.session.commit()
+		self.check_repository({'test': {'10,20.txt': "id1: 10\nid2: 20\n"}})
+	def test_change_primary_key(self):
+		class Test(self.Base):
+			__tablename__ = 'test'
+			id = Column(Integer, primary_key = True)
+			foo = Column(String)
+		self.initSession()
+		test = Test()
+		test.id = 1
+		test.foo = 'probe'
+		self.session.add(test)
+		self.session.commit()
+		self.check_repository({'test': {'1.txt': "id: 1\nfoo: probe\n"}})
+		test.id = 2
+		self.session.commit()
+		self.check_repository({'test': {'2.txt': "id: 2\nfoo: probe\n"}})
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
