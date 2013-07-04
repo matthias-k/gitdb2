@@ -62,8 +62,8 @@ class GitDBSession(object):
 		self.path = path
 		event.listen(session, "after_flush", self.after_flush)
 		event.listen(session, "after_commit", self.after_commit)
-	def gitify_filename(self, filename):
-		return filename.replace('{0}/'.format(self.path), '')
+	#def gitify_filename(self, filename):
+	#	return filename.replace('{0}/'.format(self.path), '')
 	def getFilename(self, obj, old=True):
 		old_primary_keys = []
 		primary_keys = []
@@ -79,8 +79,8 @@ class GitDBSession(object):
 				primary_keys.append(str(getattr(obj, name)))
 		oldprimarykey = ','.join(old_primary_keys)
 		primarykey = ','.join(primary_keys)
-		filename = '{0}/{1}/{2}.txt'.format(self.path, obj.__tablename__, primarykey)
-		oldfilename = '{0}/{1}/{2}.txt'.format(self.path, obj.__tablename__, oldprimarykey)
+		filename = '{0}/{1}.txt'.format(obj.__tablename__, primarykey)
+		oldfilename = '{0}/{1}.txt'.format(obj.__tablename__, oldprimarykey)
 		if old:
 			return filename, oldfilename
 		else:
@@ -89,23 +89,24 @@ class GitDBSession(object):
 		filename, oldfilename = self.getFilename(obj, old=True)
 		if oldfilename!=filename:
 			print "Primarykey changed from {0} to {1}!".format(oldfilename, filename)
-			sp.check_call(['git', 'mv', self.gitify_filename(oldfilename), self.gitify_filename(filename)], cwd=self.path)
+			self.gitCall(['mv', oldfilename, filename])
+		real_filename = os.path.join(self.path, filename)
 		try:
-			os.makedirs(os.path.dirname(filename))
+			os.makedirs(os.path.dirname(real_filename))
 		except OSError as e:
 			pass
-		with open(filename, 'w') as outfile:
+		with open(real_filename, 'w') as outfile:
 			for name in obj.__mapper__.columns.keys():
 				col_name = obj.__mapper__.columns[name].name
 				line = '{0}: {1}\n'.format(col_name, getattr(obj, name))
 				print line
 				outfile.write(line)
 		print filename
-		sp.check_call(['git', 'add', self.gitify_filename(filename)], cwd=self.path)
+		self.gitCall(['add', filename])
 	def deleteObject(self, obj):
 		print "DELETE"
 		filename, oldfilename = self.getFilename(obj, old=True)
-		sp.check_call(['git', 'rm', self.gitify_filename(oldfilename)], cwd=self.path)
+		self.gitCall(['rm', oldfilename])
 	def after_flush(self, session, flush_context):
 		print "After Flush!"
 		print "New", session.new
@@ -128,7 +129,9 @@ class GitDBSession(object):
 		print "New", session.new
 		print "Dirty", session.dirty
 		print "Deleted", session.deleted
-		sp.check_call(['git', 'commit', '-m', 'somemessage'], cwd=self.path)
+		self.gitCall(['commit', '-m', 'somemessage'])
+	def gitCall(self, args):
+		return sp.check_output(['git']+args, cwd = self.path)
 
 if __name__ == '__main__':
 	deleted = []
