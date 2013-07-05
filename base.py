@@ -17,6 +17,15 @@ import errno
    in order for association_proxy.remove() to work.
 """
 
+def makedirs(dirname):
+	"""Creates the directories for dirname via os.makedirs, but does not raise
+	   an exception if the directory already exists"""
+	try:
+		os.makedirs(dirname)
+	except OSError as e:
+		if e.errno != errno.EEXIST:
+			raise
+
 class GitDBSession(object):
 	def __init__(self, session, path, Base=None):
 		self.session = session
@@ -25,7 +34,6 @@ class GitDBSession(object):
 		self.dirty = set()
 		self.path = path
 		self.Base = Base
-		#event.listen(session, "after_flush", self.after_flush)
 		event.listen(session, "after_commit", self.after_commit)
 		if self.Base:
 			for klazz in self.Base.__subclasses__():
@@ -59,11 +67,7 @@ class GitDBSession(object):
 			print "Primarykey changed from {0} to {1}!".format(oldfilename, filename)
 			self.gitCall(['mv', oldfilename, filename])
 		real_filename = os.path.join(self.path, filename)
-		try:
-			os.makedirs(os.path.dirname(real_filename))
-		except OSError as e:
-			if e.errno != errno.EEXIST:
-				raise
+		makedirs(os.path.dirname(real_filename))
 		with open(real_filename, 'w') as outfile:
 			for name in obj.__mapper__.columns.keys():
 				col_name = obj.__mapper__.columns[name].name
@@ -83,7 +87,6 @@ class GitDBSession(object):
 	def after_delete(self, mapper, connection, target):
 		print "Instance %s being deleted" % target
 		self.deleteObject(target)
-		#self.deleted.add(target)
 	def after_insert(self, mapper, connection, target):
 		print "Instance %s being inserted" % target
 		self.writeObject(target)
