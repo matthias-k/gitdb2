@@ -80,7 +80,17 @@ class BaseSessionTest(unittest.TestCase):
 		Session = sqlalchemy.orm.sessionmaker(bind=engine)
 		self.session = Session()
 		self.GitDBSession = GitDBSession(self.session, self.test_dir, Base=self.Base)
-		
+	def newSession(self):
+		self.GitDBSession.close()
+		self.session.close()
+		del self.GitDBSession
+		del self.session
+		dbengine = 'sqlite'
+		enginepath = '{engine}:///{databasename}'.format(engine=dbengine, databasename = '{0}/test.db'.format(self.test_dir))
+		engine = sqlalchemy.create_engine(enginepath, echo=False)
+		Session = sqlalchemy.orm.sessionmaker(bind=engine)
+		self.session = Session()
+		self.GitDBSession = GitDBSession(self.session, self.test_dir, Base=self.Base)
 	def tearDown(self):
 		try:
 			shutil.rmtree(self.test_dir)
@@ -120,6 +130,9 @@ class BaseSessionTest(unittest.TestCase):
 		test.foo = 'probe2'
 		self.session.commit()
 		self.check_repository({'test': {'1.txt': "id: 1\nfoo: probe2\n"}})
+		self.newSession()
+		test1 = self.session.query(Test).get(1)
+		self.assertEqual(test1.foo, 'probe2')
 	def test_remove_object(self):
 		class Test(self.Base):
 			__tablename__ = 'test'
@@ -132,6 +145,37 @@ class BaseSessionTest(unittest.TestCase):
 		self.session.commit()
 		self.check_repository({'test': {'1.txt': "id: 1\nfoo: probe\n"}})
 		self.session.delete(test)
+		self.session.commit()
+		self.check_repository({})
+	def test_remove_objects_bulk(self):
+		class Test(self.Base):
+			__tablename__ = 'test'
+			id = Column(Integer, primary_key = True)
+			foo = Column(String)
+		self.initSession()
+		test = Test()
+		test.foo = 'probe'
+		self.session.add(test)
+		self.session.commit()
+		self.check_repository({'test': {'1.txt': "id: 1\nfoo: probe\n"}})
+		self.newSession()
+		with self.assertRaises(NotImplementedError):
+			self.session.query(Test).delete()
+		#self.session.commit()
+		#self.check_repository({})
+	def test_remove_objects_single(self):
+		class Test(self.Base):
+			__tablename__ = 'test'
+			id = Column(Integer, primary_key = True)
+			foo = Column(String)
+		self.initSession()
+		test = Test()
+		test.foo = 'probe'
+		self.session.add(test)
+		self.session.commit()
+		self.check_repository({'test': {'1.txt': "id: 1\nfoo: probe\n"}})
+		self.newSession()
+		self.session.delete(self.session.query(Test).get(1))
 		self.session.commit()
 		self.check_repository({})
 	def test_multiple_primary_keys(self):

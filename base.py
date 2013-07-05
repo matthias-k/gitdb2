@@ -16,6 +16,12 @@ import errno
    in GitDB, as GitDB has no access to the secondary table and thus cannot store it.
    Use association_proxies instead. Do not forget to set 'cascade="all, delete-orphan"'
    in order for association_proxy.remove() to work.
+   
+   Bulk updates and bulk deletes are not supported at the moment (i.e., Query.update(),
+   Query.delete(). This is because GitDB cannot get the precise rows updated or deleted.
+   GitDB will raise an NotImplementedError if bulk updates or bulk deletes occur in its
+   session. In a later version, this might be overcome by explicitly checking all objects
+   of the respective table and e.g., delete all files without a table row.
 """
 
 def makedirs(dirname):
@@ -35,12 +41,23 @@ class GitDBSession(object):
 		self.dirty = set()
 		self.path = path
 		self.Base = Base
+		self.active=True
 		event.listen(session, "after_commit", self.after_commit)
+		event.listen(session, "after_rollback", self.after_rollback)
+		event.listen(session, "after_bulk_delete", self.after_bulk_delete)
+		event.listen(session, "after_bulk_update", self.after_bulk_update)
+		
 		if self.Base:
 			for klazz in self.Base.__subclasses__():
 				event.listen(klazz.__mapper__, 'after_delete', self.after_delete)
 				event.listen(klazz.__mapper__, 'after_insert', self.after_insert)
 				event.listen(klazz.__mapper__, 'after_update', self.after_update)
+	def close(self):
+		self.active=False
+		#self.after_commit = lambda *args: None
+		#self.after_insert = lambda *args: None
+		#self.after_update = lambda *args: None
+		#self.after_delete = lambda *args: None
 	def getFilename(self, obj, old=True):
 		old_primary_keys = []
 		primary_keys = []
@@ -82,17 +99,37 @@ class GitDBSession(object):
 		filename, oldfilename = self.getFilename(obj, old=True)
 		self.gitCall(['rm', oldfilename])
 	def after_commit(self, session):
+		if not self.active: return
 		actions = self.gitCall(['status', '--porcelain'])
 		if actions:
 			self.gitCall(['commit', '-m', actions])
+	def after_rollback(self, session):
+		if not self.active: return
+		self.gitCall(['commit', 'reset', '--hard', 'HEAD'])
 	def after_delete(self, mapper, connection, target):
+		if not self.active: return
 		print "Instance %s being deleted" % target
 		self.deleteObject(target)
+	def after_bulk_delete(self, session, query, query_context, result):
+		if not self.active: return
+		raise NotImplementedError('GitDB cannot yet handle bulk deletes!')
+		affected_table = query_context.statement.froms[0]
+		print affected_table
+		affected_rows = query_context.statement.execute().fetchall() 
+		#affected_rows = session.execute(query_context.statement).fetchall()
+		print affected_rows
+		#for res in  result:
+		#	print res
+	def after_bulk_update(self, session, query, query_context, result):
+		if not self.active: return
+		raise NotImplementedError('GitDB cannot yet handle bulk updates!')
 	def after_insert(self, mapper, connection, target):
+		if not self.active: return
 		print "Instance %s being inserted" % target
 		self.writeObject(target)
 	def after_update(self, mapper, connection, target):
-		print "Instance %s being updated" % target
+		if not self.active: return
+		print "Instance %s being updated in %s" % (target, self)
 		self.writeObject(target)
 	def gitCall(self, args):
 		return sp.check_output(['git']+args, cwd = self.path)
