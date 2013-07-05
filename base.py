@@ -1,5 +1,6 @@
-from sqlalchemy.orm import attributes
+from sqlalchemy.orm import attributes, sessionmaker
 from sqlalchemy import event
+import sqlalchemy as sa
 
 
 import subprocess as sp
@@ -96,3 +97,20 @@ class GitDBSession(object):
 	def gitCall(self, args):
 		return sp.check_output(['git']+args, cwd = self.path)
 
+class GitDBRepo(object):
+	def __init__(self, Base, path, dbname='database.db'):
+		self.Base = Base
+		self.path = path
+		self.dbname = dbname
+		dbengine = 'sqlite'
+		enginepath = '{engine}:///{databasename}'.format(engine=dbengine, databasename = os.path.join(self.path, dbname))
+		self.engine = sa.create_engine(enginepath, echo=False)
+		self.Base.metadata.create_all(self.engine)
+		Session = sessionmaker(bind=self.engine)
+		self.session = Session()
+		self.GitDBSession = GitDBSession(self.session, self.path, Base=self.Base)
+	@classmethod
+	def init(cls, Base, path):
+		makedirs(path)
+		sp.check_output(['git', 'init'], cwd=path)
+		return cls(Base, path)
