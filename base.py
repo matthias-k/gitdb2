@@ -7,6 +7,8 @@ import subprocess as sp
 import os
 import errno
 
+from data_types import TypeManager
+
 import logging
 logger = logging.getLogger(__name__)
 
@@ -93,7 +95,12 @@ class GitDBSession(object):
 		with open(real_filename, 'w') as outfile:
 			for name in obj.__mapper__.columns.keys():
 				col_name = obj.__mapper__.columns[name].name
-				line = '{0}: {1}\n'.format(col_name, getattr(obj, name))
+				value = getattr(obj, name)
+				for t in TypeManager.type_dict:
+					if isinstance(obj.__mapper__.columns[name].type, t):
+						value_str = TypeManager.type_dict[t].to_string(value)
+						break
+				line = '{0}: {1}\n'.format(col_name, value_str)
 				self.logger.debug(line)
 				outfile.write(line)
 		self.logger.debug(filename)
