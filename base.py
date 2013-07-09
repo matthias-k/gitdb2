@@ -109,7 +109,7 @@ class GitDBSession(object):
 			self.gitCall(['commit', '-m', actions])
 	def after_rollback(self, session):
 		if not self.active: return
-		self.gitCall(['commit', 'reset', '--hard', 'HEAD'])
+		self.gitCall(['reset', '--hard', 'HEAD'])
 	def after_delete(self, mapper, connection, target):
 		if not self.active: return
 		self.logger.debug("Instance %s being deleted" % target)
