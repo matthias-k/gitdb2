@@ -93,7 +93,13 @@ class GitDBSession(object):
 		real_filename = os.path.join(self.path, filename)
 		makedirs(os.path.dirname(real_filename))
 		with open(real_filename, 'w') as outfile:
+			if hasattr(obj, '__content__'):
+				content_name = obj.__content__
+			else:
+				content_name = None
 			for name in obj.__mapper__.columns.keys():
+				if name == content_name:
+					continue
 				col_name = obj.__mapper__.columns[name].name
 				value = getattr(obj, name)
 				for t in TypeManager.type_dict:
@@ -103,6 +109,10 @@ class GitDBSession(object):
 				line = '{0}: {1}\n'.format(col_name, value_str)
 				self.logger.debug(line)
 				outfile.write(line)
+			if content_name:
+				value = getattr(obj, content_name)
+				outfile.write('\n')
+				outfile.write(value)
 		self.logger.debug(filename)
 		self.gitCall(['add', filename])
 	def deleteObject(self, obj):
