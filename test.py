@@ -2,6 +2,7 @@ import unittest
 import errno
 import os
 import shutil
+import datetime
 
 import sqlalchemy as sa
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, ForeignKeyConstraint
@@ -284,6 +285,52 @@ class BaseSessionTest(unittest.TestCase):
 		self.check_repository({'test1': {'1.txt': "id: 1\n"},
 			'test2': {'1.txt': "id: 1\n"}})
 			#'rel': {'4,1.txt': "test1_id: 4\ntest2_id: 1\n"}})
+
+	def test_types_string(self):
+		class Test(self.Base):
+			__tablename__ = 'test'
+			id = Column(Integer, primary_key = True)
+			foo = Column(String)
+		self.initSession()
+		test = Test()
+		test.foo = 'probe'
+		self.session.add(test)
+		self.session.commit()
+		self.check_repository({'test': {'1.txt': "id: 1\nfoo: probe\n"}})
+	def test_types_integer(self):
+		class Test(self.Base):
+			__tablename__ = 'test'
+			id = Column(Integer, primary_key = True)
+			foo = Column(Integer)
+		self.initSession()
+		test = Test()
+		test.foo = 12345
+		self.session.add(test)
+		self.session.commit()
+		self.check_repository({'test': {'1.txt': "id: 1\nfoo: 12345\n"}})
+	def test_types_datetime(self):
+		class Test(self.Base):
+			__tablename__ = 'test'
+			id = Column(Integer, primary_key = True)
+			foo = Column(DateTime)
+		self.initSession()
+		test = Test()
+		test.foo = datetime.datetime(year=2013, month=9, day=30, hour=12, minute=30, second=12)
+		self.session.add(test)
+		self.session.commit()
+		self.check_repository({'test': {'1.txt': "id: 1\nfoo: 2013-09-30_12-30-12\n"}})
+	def test_types_content(self):
+		class Test(self.Base):
+			__tablename__ = 'test'
+			id = Column(Integer, primary_key = True)
+			foo = Column(String)
+			__content__ = 'foo'
+		self.initSession()
+		test = Test()
+		test.foo = 'probe\nstring'
+		self.session.add(test)
+		self.session.commit()
+		self.check_repository({'test': {'1.txt': "id: 1\n\nprobe\nstring"}})
 
 class GitDBRepoTest(unittest.TestCase):
 	test_dir = 'unittest_repo'
