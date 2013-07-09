@@ -7,6 +7,9 @@ import subprocess as sp
 import os
 import errno
 
+import logging
+logger = logging.getLogger(__name__)
+
 """
    In sqlite, one should use "passive_updates=False" for relationships,
    as sqlite does not cascade primary_key-updates. Also, if the database
@@ -35,6 +38,7 @@ def makedirs(dirname):
 
 class GitDBSession(object):
 	def __init__(self, session, path, Base=None):
+		self.logger = logger.getChild('session')
 		self.session = session
 		self.new = set()
 		self.deleted = set()
@@ -82,7 +86,7 @@ class GitDBSession(object):
 	def writeObject(self, obj):
 		filename, oldfilename = self.getFilename(obj, old=True)
 		if oldfilename!=filename:
-			print "Primarykey changed from {0} to {1}!".format(oldfilename, filename)
+			self.logger.debug("Primarykey changed from {0} to {1}!".format(oldfilename, filename))
 			self.gitCall(['mv', oldfilename, filename])
 		real_filename = os.path.join(self.path, filename)
 		makedirs(os.path.dirname(real_filename))
@@ -90,12 +94,12 @@ class GitDBSession(object):
 			for name in obj.__mapper__.columns.keys():
 				col_name = obj.__mapper__.columns[name].name
 				line = '{0}: {1}\n'.format(col_name, getattr(obj, name))
-				print line
+				self.logger.debug(line)
 				outfile.write(line)
-		print filename
+		self.logger.debug(filename)
 		self.gitCall(['add', filename])
 	def deleteObject(self, obj):
-		print "DELETE"
+		self.logger.debug("DELETE")
 		filename, oldfilename = self.getFilename(obj, old=True)
 		self.gitCall(['rm', oldfilename])
 	def after_commit(self, session):
@@ -108,28 +112,28 @@ class GitDBSession(object):
 		self.gitCall(['commit', 'reset', '--hard', 'HEAD'])
 	def after_delete(self, mapper, connection, target):
 		if not self.active: return
-		print "Instance %s being deleted" % target
+		self.logger.debug("Instance %s being deleted" % target)
 		self.deleteObject(target)
 	def after_bulk_delete(self, session, query, query_context, result):
 		if not self.active: return
 		raise NotImplementedError('GitDB cannot yet handle bulk deletes!')
 		affected_table = query_context.statement.froms[0]
 		print affected_table
-		affected_rows = query_context.statement.execute().fetchall() 
-		#affected_rows = session.execute(query_context.statement).fetchall()
+		#affected_rows = query_context.statement.execute().fetchall() 
+		affected_rows = session.execute(query_context.statement).fetchall()
 		print affected_rows
-		#for res in  result:
-		#	print res
+		for res in  result.fetchall():
+			print res
 	def after_bulk_update(self, session, query, query_context, result):
 		if not self.active: return
 		raise NotImplementedError('GitDB cannot yet handle bulk updates!')
 	def after_insert(self, mapper, connection, target):
 		if not self.active: return
-		print "Instance %s being inserted" % target
+		self.logger.debug("Instance %s being inserted" % target)
 		self.writeObject(target)
 	def after_update(self, mapper, connection, target):
 		if not self.active: return
-		print "Instance %s being updated in %s" % (target, self)
+		self.logger.debug("Instance %s being updated in %s" % (target, self))
 		self.writeObject(target)
 	def gitCall(self, args):
 		return sp.check_output(['git']+args, cwd = self.path)

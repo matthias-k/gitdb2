@@ -53,7 +53,7 @@ class BaseSessionTest(unittest.TestCase):
 	def setUp(self):
 		self.Base = sqlalchemy.ext.declarative.declarative_base()
 		os.makedirs(self.test_dir)
-		sp.check_call(['git', 'init'], cwd=self.test_dir)
+		sp.check_output(['git', 'init'], cwd=self.test_dir)
 	def check_repository(self, repo_data):
 		def check_directory(directory, data):
 			files = os.listdir(directory)
@@ -289,9 +289,8 @@ class GitDBRepoTest(unittest.TestCase):
 	test_dir = 'unittest_repo'
 	def setUp(self):
 		self.Base = sqlalchemy.ext.declarative.declarative_base()
-		
 		os.makedirs(self.test_dir)
-		sp.check_call(['git', 'init'], cwd=self.test_dir)
+		sp.check_output(['git', 'init'], cwd=self.test_dir)
 	def check_repository(self, repo_data):
 		def check_directory(directory, data):
 			files = os.listdir(directory)
