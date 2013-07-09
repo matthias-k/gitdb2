@@ -6,6 +6,8 @@ import sqlalchemy as sa
 import subprocess as sp
 import os
 import errno
+import glob
+import codecs
 
 from data_types import TypeManager
 
@@ -31,7 +33,9 @@ logger = logging.getLogger(__name__)
 
 def makedirs(dirname):
 	"""Creates the directories for dirname via os.makedirs, but does not raise
-	   an exception if the directory already exists"""
+	   an exception if the directory already exists and passes if dirname=""."""
+	if not dirname:
+		return
 	try:
 		os.makedirs(dirname)
 	except OSError as e:
@@ -124,6 +128,7 @@ class GitDBSession(object):
 		actions = self.gitCall(['status', '--porcelain'])
 		if actions:
 			self.gitCall(['commit', '-m', actions])
+			self.saveCurrentCommit()
 	def after_rollback(self, session):
 		if not self.active: return
 		self.gitCall(['reset', '--hard', 'HEAD'])
@@ -152,21 +157,109 @@ class GitDBSession(object):
 		if not self.active: return
 		self.logger.debug("Instance %s being updated in %s" % (target, self))
 		self.writeObject(target)
+	def getCurrentCommit(self):
+		out = self.gitCall(['rev-parse', 'HEAD'])
+		return out.split('\n',1)[0].strip()
+	def saveCurrentCommit(self):
+		with open(os.path.join(self.path, 'dbcommit'), 'w') as dbcommit_file:
+			dbcommit_file.write(self.getCurrentCommit()+'\n')
 	def gitCall(self, args):
 		return sp.check_output(['git']+args, cwd = self.path)
+
+def construct_from_string(klazz, data):
+	new_object = klazz()
+	parts = data.split('\n\n', 1)
+	if len(parts)>1:
+		meta, content = parts
+	else:
+		meta, content = parts[0], None
+	data = {}
+	name_dict = {klazz.__mapper__.columns[attr_name].name: attr_name for attr_name in klazz.__mapper__.columns.keys()}
+	for line in meta.split('\n'):
+		if line:
+			key, value=line.split(': ',1)
+			if key in name_dict:
+				col = klazz.__mapper__.columns[key]
+				for t in TypeManager.type_dict:
+					if isinstance(col.type, t):
+						real_value = TypeManager.type_dict[t].from_string(value)
+						break
+				setattr(new_object, key, real_value)
+	if content != None:
+		setattr(new_object, new_object.__content__, content)
+	return new_object
 
 class GitDBRepo(object):
 	def __init__(self, Base, path, dbname='database.db'):
 		self.Base = Base
 		self.path = path
 		self.dbname = dbname
+		databasepath = os.path.join(self.path, self.dbname)
+		if not os.path.exists(databasepath):
+			self.startDatabase(refresh=True)
+		else:
+			try:
+				with open(os.path.join(self.path, 'dbcommit')) as dbcommit_file:
+					content = dbcommit_file.read()
+					commit = content.split('\n')[0].strip()
+			except IOError as e:
+				if e.errno == errno.ENOENT:
+					commit = None
+				else:
+					raise e
+			if commit != self.getCurrentCommit():
+				self.startDatabase(refresh=True)
+			else:
+				self.startDatabase(refresh=False)
+	def startDatabase(self, refresh=False):
+		databasename = os.path.join(self.path, self.dbname)
+		if refresh:
+			if os.path.exists(databasename):
+				os.remove(databasename)
+		makedirs(os.path.dirname(self.path))
 		dbengine = 'sqlite'
-		enginepath = '{engine}:///{databasename}'.format(engine=dbengine, databasename = os.path.join(self.path, dbname))
-		self.engine = sa.create_engine(enginepath, echo=False)
-		self.Base.metadata.create_all(self.engine)
-		Session = sessionmaker(bind=self.engine)
+		enginepath = '{engine}:///{databasename}'.format(engine=dbengine, databasename = databasename)
+		
+		self.engine = sa.create_engine(enginepath)
+		if refresh:
+			self.Base.metadata.create_all(self.engine)
+		Session = sa.orm.sessionmaker(bind=self.engine)
 		self.session = Session()
-		self.GitDBSession = GitDBSession(self.session, self.path, Base=self.Base)
+		if refresh:
+			logging.info("Refreshing database")
+			self.setup()
+			self.saveCurrentCommit()
+		else:
+			logging.info("Reusing database")
+		self.gitDBSession = GitDBSession(self.session, self.path, Base=self.Base)
+	def setup(self):
+		for klazz in self.Base.__subclasses__():
+			directory = os.path.join(self.path, klazz.__tablename__)
+			files = glob.glob(os.path.join(directory, '*'))
+			files = [f for f in files if not os.path.basename(f) == '_files']
+			for f in sorted(files):
+				logging.debug("Reading file %s" % f)
+				with codecs.open(f, encoding='utf-8') as f:
+					text = f.read()
+				obj = construct_from_string(klazz, text)
+				self.session.add(obj)
+		self.session.commit()
+	def getCurrentCommit(self):
+		out = self.gitCall(['rev-parse', 'HEAD'])
+		return out.split('\n',1)[0].strip()
+	def saveCurrentCommit(self):
+		out, err = sp.Popen(['git', 'rev-parse', 'HEAD'], stdout = sp.PIPE, stderr=sp.PIPE, cwd = self.path).communicate()
+		if err:
+			if not 'unknown revision or path not in the working tree' in err:
+				raise sp.CalledProcessError(err)
+		else:
+			with open(os.path.join(self.path, 'dbcommit'), 'w') as dbcommit_file:
+				dbcommit_file.write(out.split('\n',1)[0]+'\n')
+	def gitCall(self, args):
+		return sp.check_output(['git']+args, cwd = self.path)
+	def close(self):
+		self.gitDBSession.close()
+		self.session.close()
 	@classmethod
 	def init(cls, Base, path):
 		makedirs(path)

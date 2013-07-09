@@ -58,7 +58,7 @@ class BaseSessionTest(unittest.TestCase):
 	def check_repository(self, repo_data):
 		def check_directory(directory, data):
 			files = os.listdir(directory)
-			files = [f for f in files if not f in ['.git', 'test.db']]
+			files = [f for f in files if not f in ['.git', 'test.db', 'dbcommit']]
 			files = set(files)
 			needed_files = set(data.keys())
 			self.assertEqual(needed_files, files)
@@ -341,7 +341,7 @@ class GitDBRepoTest(unittest.TestCase):
 	def check_repository(self, repo_data):
 		def check_directory(directory, data):
 			files = os.listdir(directory)
-			files = [f for f in files if not f in ['.git', 'database.db']]
+			files = [f for f in files if not f in ['.git', 'database.db', 'dbcommit']]
 			files = set(files)
 			needed_files = set(data.keys())
 			self.assertEqual(needed_files, files)
@@ -353,6 +353,12 @@ class GitDBRepoTest(unittest.TestCase):
 		check_directory(self.test_dir, repo_data)
 	def initRepo(self):
 		self.repo = GitDBRepo.init(self.Base, self.test_dir)
+		self.session = self.repo.session
+	def restartRepo(self, reloadDatabase=False):
+		self.repo.close()
+		if reloadDatabase:
+			os.remove(os.path.join(self.test_dir, 'database.db'))
+		self.repo = GitDBRepo(self.Base, self.test_dir)
 		self.session = self.repo.session
 	def tearDown(self):
 		try:
@@ -379,7 +385,12 @@ class GitDBRepoTest(unittest.TestCase):
 		self.session.add(test)
 		self.session.commit()
 		self.check_repository({'test': {'1.txt': "id: 1\nfoo: probe\n"}})
-
+		self.restartRepo(reloadDatabase=False)
+		test = self.session.query(Test).one()
+		self.assertEqual(test.foo, 'probe')
+		self.restartRepo(reloadDatabase=True)
+		test = self.session.query(Test).one()
+		self.assertEqual(test.foo, 'probe')
 if __name__ == '__main__':
 	import sys
 	#if len(sys.argv)>1:
