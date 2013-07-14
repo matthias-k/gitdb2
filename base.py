@@ -127,7 +127,9 @@ class GitDBSession(object):
 	def after_commit(self, session):
 		if not self.active: return
 		actions = self.gitCall(['status', '--porcelain'])
-		if actions and actions != '?? database.db\n?? dbcommit\n':
+		actions = actions.replace('?? database.db\n', '')
+		actions = actions.replace('?? dbcommit\n', '')
+		if actions:
 			self.gitCall(['commit', '-m', actions])
 			self.saveCurrentCommit()
 	def after_rollback(self, session):
