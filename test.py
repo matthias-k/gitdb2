@@ -13,6 +13,7 @@ from sqlalchemy.ext.orderinglist import ordering_list
 from sqlalchemy.ext.associationproxy import association_proxy
 
 from base import *
+import data_types
 
 
 #@sa.event.listens_for(sa.engine.Engine, "connect")
@@ -319,6 +320,17 @@ class BaseSessionTest(unittest.TestCase):
 		self.session.add(test)
 		self.session.commit()
 		self.check_repository({'test': {'1.txt': "id: 1\nfoo: 2013-09-30_12-30-12\n"}})
+	def test_types_integer(self):
+		class Test(self.Base):
+			__tablename__ = 'test'
+			id = Column(Integer, primary_key = True)
+			foo = Column(Boolean)
+		self.initSession()
+		test = Test()
+		test.foo = True
+		self.session.add(test)
+		self.session.commit()
+		self.check_repository({'test': {'1.txt': "id: 1\nfoo: True\n"}})
 	def test_types_content(self):
 		class Test(self.Base):
 			__tablename__ = 'test'
@@ -391,6 +403,17 @@ class GitDBRepoTest(unittest.TestCase):
 		self.restartRepo(reloadDatabase=True)
 		test = self.session.query(Test).one()
 		self.assertEqual(test.foo, 'probe')
+
+class TypeTests(unittest.TestCase):
+	def test_bool(self):
+		self.assertEqual(data_types.TypeManager.type_dict[sa.Boolean].to_string(True), 'True')
+		self.assertEqual(data_types.TypeManager.type_dict[sa.Boolean].to_string(False), 'False')
+		self.assertEqual(data_types.TypeManager.type_dict[sa.Boolean].to_string(None), 'None')
+
+		self.assertEqual(data_types.TypeManager.type_dict[sa.Boolean].from_string('True'), True)
+		self.assertEqual(data_types.TypeManager.type_dict[sa.Boolean].from_string('False'), False)
+		self.assertEqual(data_types.TypeManager.type_dict[sa.Boolean].from_string('None'), None)
+
 if __name__ == '__main__':
 	import sys
 	#if len(sys.argv)>1:

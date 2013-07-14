@@ -43,3 +43,19 @@ class DateTime(AbstractType):
 		return datetime.datetime.strptime(value, '%Y-%m-%d_%H-%M-%S')
 TypeManager.register_type(sa.DateTime, DateTime)
 
+class Bool(AbstractType):
+	@staticmethod
+	def to_string(value):
+		return str(value)
+	@staticmethod
+	def from_string(value):
+		if value.lower() == 'true':
+			return True
+		elif value.lower() == 'false':
+			return False
+		elif value.lower() == 'none':
+			return None
+		else:
+			raise ValueError('Invalid value for type Boolean: {0}'.format(value))
+TypeManager.register_type(sa.Boolean, Bool)
+

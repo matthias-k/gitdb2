@@ -13,6 +13,7 @@ from data_types import TypeManager
 
 import logging
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 """
    In sqlite, one should use "passive_updates=False" for relationships,
@@ -126,7 +127,7 @@ class GitDBSession(object):
 	def after_commit(self, session):
 		if not self.active: return
 		actions = self.gitCall(['status', '--porcelain'])
-		if actions:
+		if actions and actions != '?? database.db\n?? dbcommit\n':
 			self.gitCall(['commit', '-m', actions])
 			self.saveCurrentCommit()
 	def after_rollback(self, session):
