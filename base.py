@@ -13,7 +13,7 @@ from data_types import TypeManager
 
 import logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.ERROR)
 
 """
    In sqlite, one should use "passive_updates=False" for relationships,
@@ -32,6 +32,32 @@ logger.setLevel(logging.DEBUG)
    of the respective table and e.g., delete all files without a table row.
 """
 
+#class MyFormatter(logging.Formatter):
+  #""" from http://web.archive.org/web/20100107060919/http://tony.czechit.net/2009/02/unicode-support-for-pythons-logging-library/"""
+  #def __init__(self, fmt=None, datefmt=None, encoding='windows-1250'):
+    #logging.Formatter.__init__(self, fmt, datefmt)
+    #self.encoding = encoding
+ 
+  #def formatException(self, ei):
+    #r = logging.Formatter.formatException(self, ei)
+    #if type(r) in [types.StringType]:
+      #r = r.decode('windows-1250', 'replace') # Convert to unicode
+    #return r
+ 
+  #def format(self, record):
+    #t = logging.Formatter.format(self, record)
+    #if type(t) in [types.UnicodeType]:
+      #t = t.encode(self.encoding, 'replace')
+    #return t
+
+#console = logging.StreamHandler()
+#console.setLevel(logging.DEBUG)
+#formatter = MyFormatter(
+  #fmt='%(name)s: %(message)s',
+  #encoding='cp852')
+#console.setFormatter(formatter)
+#logger.addHandler(console)
+
 def makedirs(dirname):
 	"""Creates the directories for dirname via os.makedirs, but does not raise
 	   an exception if the directory already exists and passes if dirname=""."""
@@ -45,7 +71,7 @@ def makedirs(dirname):
 
 class GitDBSession(object):
 	def __init__(self, session, path, Base=None):
-		self.logger = logger.getChild('session')
+		#self.logger = logger.getChild('session')
 		self.session = session
 		self.new = set()
 		self.deleted = set()
@@ -93,11 +119,12 @@ class GitDBSession(object):
 	def writeObject(self, obj):
 		filename, oldfilename = self.getFilename(obj, old=True)
 		if oldfilename!=filename:
-			self.logger.debug("Primarykey changed from {0} to {1}!".format(oldfilename, filename))
+			#self.logger.debug("Primarykey changed from {0} to {1}!".format(oldfilename, filename))
 			self.gitCall(['mv', oldfilename, filename])
 		real_filename = os.path.join(self.path, filename)
 		makedirs(os.path.dirname(real_filename))
-		with open(real_filename, 'w') as outfile:
+		with codecs.open(real_filename, 'w', encoding='utf-8') as outfile:
+			#print "Starting outfile"
 			if hasattr(obj, '__content__'):
 				content_name = obj.__content__
 			else:
@@ -107,21 +134,27 @@ class GitDBSession(object):
 					continue
 				col_name = obj.__mapper__.columns[name].name
 				value = getattr(obj, name)
+				if value is None:
+					continue
 				for t in TypeManager.type_dict:
 					if isinstance(obj.__mapper__.columns[name].type, t):
 						value_str = TypeManager.type_dict[t].to_string(value)
 						break
-				line = '{0}: {1}\n'.format(col_name, value_str)
-				self.logger.debug(line)
+				#print "line", col_name
+				#print value_str
+				line = u'{0}: {1}\n'.format(col_name, value_str)
+				#print line
+				#self.logger.debug('%r' % line)
 				outfile.write(line)
+				#print 'lab'
 			if content_name:
 				value = getattr(obj, content_name)
 				outfile.write('\n')
 				outfile.write(value)
-		self.logger.debug(filename)
+		#self.logger.debug(filename)
 		self.gitCall(['add', filename])
 	def deleteObject(self, obj):
-		self.logger.debug("DELETE")
+		#self.logger.debug("DELETE")
 		filename, oldfilename = self.getFilename(obj, old=True)
 		self.gitCall(['rm', oldfilename])
 	def after_commit(self, session):
@@ -137,7 +170,7 @@ class GitDBSession(object):
 		self.gitCall(['reset', '--hard', 'HEAD'])
 	def after_delete(self, mapper, connection, target):
 		if not self.active: return
-		self.logger.debug("Instance %s being deleted" % target)
+		#self.logger.debug("Instance %s being deleted" % target)
 		self.deleteObject(target)
 	def after_bulk_delete(self, session, query, query_context, result):
 		if not self.active: return
@@ -154,11 +187,11 @@ class GitDBSession(object):
 		raise NotImplementedError('GitDB cannot yet handle bulk updates!')
 	def after_insert(self, mapper, connection, target):
 		if not self.active: return
-		self.logger.debug("Instance %s being inserted" % target)
+		#self.logger.debug("Instance %s being inserted" % target)
 		self.writeObject(target)
 	def after_update(self, mapper, connection, target):
 		if not self.active: return
-		self.logger.debug("Instance %s being updated in %s" % (target, self))
+		#self.logger.debug("Instance %s being updated in %s" % (target, self))
 		self.writeObject(target)
 	def getCurrentCommit(self):
 		out = self.gitCall(['rev-parse', 'HEAD'])

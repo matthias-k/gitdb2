@@ -1,8 +1,12 @@
+# -*- coding: utf-8 -*-
+
+
 import unittest
 import errno
 import os
 import shutil
 import datetime
+import codecs
 
 import sqlalchemy as sa
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, ForeignKeyConstraint
@@ -67,7 +71,7 @@ class BaseSessionTest(unittest.TestCase):
 				if isinstance(data[f], dict):
 					check_directory(os.path.join(directory, f), data[f])
 				elif data[f] is not None:
-					self.assertEqual(open(os.path.join(directory, f)).read(), data[f])
+					self.assertEqual(codecs.open(os.path.join(directory, f), encoding='utf-8').read(), data[f])
 		check_directory(self.test_dir, repo_data)
 	def initSession(self):
 		try:
@@ -135,6 +139,28 @@ class BaseSessionTest(unittest.TestCase):
 		self.newSession()
 		test1 = self.session.query(Test).get(1)
 		self.assertEqual(test1.foo, 'probe2')
+	def test_unicode(self):
+		class Test(self.Base):
+			__tablename__ = 'test'
+			id = Column(Integer, primary_key = True)
+			foo = Column(String)
+		self.initSession()
+		test = Test()
+		test.foo = u'üüüe'
+		self.session.add(test)
+		self.session.commit()
+		self.check_repository({'test': {'1.txt': u"id: 1\nfoo: üüüe\n"}})
+	def test_None(self):
+		class Test(self.Base):
+			__tablename__ = 'test'
+			id = Column(Integer, primary_key = True)
+			foo = Column(String)
+		self.initSession()
+		test = Test()
+		test.foo = None
+		self.session.add(test)
+		self.session.commit()
+		self.check_repository({'test': {'1.txt': u"id: 1\n"}})
 	def test_remove_object(self):
 		class Test(self.Base):
 			__tablename__ = 'test'
@@ -403,7 +429,24 @@ class GitDBRepoTest(unittest.TestCase):
 		self.restartRepo(reloadDatabase=True)
 		test = self.session.query(Test).one()
 		self.assertEqual(test.foo, 'probe')
-
+	def test_None(self):
+		class Test(self.Base):
+			__tablename__ = 'test'
+			id = Column(Integer, primary_key = True)
+			foo = Column(String)
+		self.initRepo()
+		test = Test()
+		test.foo = None
+		self.session.add(test)
+		self.session.commit()
+		self.check_repository({'test': {'1.txt': "id: 1\n"}})
+		self.restartRepo(reloadDatabase=False)
+		test = self.session.query(Test).one()
+		self.assertEqual(test.foo, None)
+		self.restartRepo(reloadDatabase=True)
+		test = self.session.query(Test).one()
+		self.assertEqual(test.foo, None)
+		
 class TypeTests(unittest.TestCase):
 	def test_bool(self):
 		self.assertEqual(data_types.TypeManager.type_dict[sa.Boolean].to_string(True), 'True')
