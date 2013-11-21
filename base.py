@@ -13,7 +13,8 @@ from data_types import TypeManager
 
 import logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.ERROR)
+#logger.setLevel(logging.ERROR)
+logger.setLevel(logging.INFO)
 
 """
    In sqlite, one should use "passive_updates=False" for relationships,
@@ -79,6 +80,8 @@ class GitDBSession(object):
 		self.path = path
 		self.Base = Base
 		self.active=True
+		self.written_files = []
+		self.deleted_files = []
 		event.listen(session, "after_commit", self.after_commit)
 		event.listen(session, "after_rollback", self.after_rollback)
 		event.listen(session, "after_bulk_delete", self.after_bulk_delete)
@@ -123,6 +126,7 @@ class GitDBSession(object):
 			self.gitCall(['mv', oldfilename, filename])
 		real_filename = os.path.join(self.path, filename)
 		makedirs(os.path.dirname(real_filename))
+		#print real_filename
 		with codecs.open(real_filename, 'w', encoding='utf-8') as outfile:
 			#print "Starting outfile"
 			if hasattr(obj, '__content__'):
@@ -151,22 +155,35 @@ class GitDBSession(object):
 				value = getattr(obj, content_name)
 				outfile.write('\n')
 				outfile.write(value)
+		#print "Done writing"
 		#self.logger.debug(filename)
-		self.gitCall(['add', filename])
+		self.written_files.append(filename)
+		#self.gitCall(['add', filename])
+		#print "Added"
 	def deleteObject(self, obj):
 		#self.logger.debug("DELETE")
 		filename, oldfilename = self.getFilename(obj, old=True)
+		self.deleted_files.append(oldfilename)
 		self.gitCall(['rm', oldfilename])
 	def after_commit(self, session):
 		if not self.active: return
-		actions = self.gitCall(['status', '--porcelain'])
-		actions = actions.replace('?? database.db\n', '')
-		actions = actions.replace('?? dbcommit\n', '')
-		if actions:
-			self.gitCall(['commit', '-m', actions])
-			self.saveCurrentCommit()
+		print "pre After commit!!!"
+		if self.written_files or self.deleted_files:
+			self.gitCall(['add']+self.written_files)
+			self.written_files = []
+			self.deleted_files = []
+			actions = self.gitCall(['status', '--porcelain'])
+			actions = actions.replace('?? database.db\n', '')
+			actions = actions.replace('?? dbcommit\n', '')
+			if actions:
+				self.gitCall(['commit', '-m', actions])
+				self.saveCurrentCommit()
+		print "post After commit!!!"
 	def after_rollback(self, session):
 		if not self.active: return
+		if self.written_files:
+			self.gitCall(['add']+self.written_files)
+			self.written_files = []
 		self.gitCall(['reset', '--hard', 'HEAD'])
 	def after_delete(self, mapper, connection, target):
 		if not self.active: return
