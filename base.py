@@ -169,8 +169,9 @@ class GitDBSession(object):
 		if not self.active: return
 		print "pre After commit!!!"
 		if self.written_files or self.deleted_files:
-			self.gitCall(['add']+self.written_files)
-			self.written_files = []
+			if self.written_files:
+				self.gitCall(['add']+self.written_files)
+				self.written_files = []
 			self.deleted_files = []
 			actions = self.gitCall(['status', '--porcelain'])
 			actions = actions.replace('?? database.db\n', '')
@@ -232,12 +233,12 @@ def construct_from_string(klazz, data):
 		if line:
 			key, value=line.split(': ',1)
 			if key in name_dict:
-				col = klazz.__mapper__.columns[key]
+				col = klazz.__mapper__.columns[name_dict[key]]
 				for t in TypeManager.type_dict:
 					if isinstance(col.type, t):
 						real_value = TypeManager.type_dict[t].from_string(value)
 						break
-				setattr(new_object, key, real_value)
+				setattr(new_object, name_dict[key], real_value)
 	if content != None:
 		setattr(new_object, new_object.__content__, content)
 	return new_object

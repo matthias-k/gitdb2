@@ -446,6 +446,25 @@ class GitDBRepoTest(unittest.TestCase):
 		self.restartRepo(reloadDatabase=True)
 		test = self.session.query(Test).one()
 		self.assertEqual(test.foo, None)
+	def test_Colname_not_Attribute_name(self):
+		class Test(self.Base):
+			__tablename__ = 'test'
+			id = Column(Integer, primary_key = True)
+			foo = Column('_foo', String)
+		self.initRepo()
+		test = Test()
+		test.foo = 'blub'
+		self.session.add(test)
+		self.session.commit()
+		self.check_repository({'test': {'1.txt': "_foo: blub\nid: 1\n"}})
+		self.restartRepo(reloadDatabase=False)
+		test = self.session.query(Test).one()
+		self.assertFalse(hasattr(test, '_foo'))
+		self.assertEqual(test.foo, "blub")
+		self.restartRepo(reloadDatabase=True)
+		test = self.session.query(Test).one()
+		self.assertFalse(hasattr(test, '_foo'))
+		self.assertEqual(test.foo, "blub")
 		
 class TypeTests(unittest.TestCase):
 	def test_bool(self):
