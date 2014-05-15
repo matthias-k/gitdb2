@@ -297,6 +297,7 @@ class GitDBRepo(object):
 					text = f.read()
 				obj = construct_from_string(klazz, text)
 				self.session.add(obj)
+			self.session.flush()
 			self.session.expire_all()
 		self.session.commit()
 	def getCurrentCommit(self):
