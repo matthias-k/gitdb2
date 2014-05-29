@@ -31,6 +31,8 @@ logger.setLevel(logging.INFO)
    GitDB will raise an NotImplementedError if bulk updates or bulk deletes occur in its
    session. In a later version, this might be overcome by explicitly checking all objects
    of the respective table and e.g., delete all files without a table row.
+   
+   newlines in string columns are escaped to r'\n' when saved to file.
 """
 
 #class MyFormatter(logging.Formatter):

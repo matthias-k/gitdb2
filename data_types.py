@@ -19,10 +19,10 @@ class AbstractType(object):
 class String(AbstractType):
 	@staticmethod
 	def to_string(value):
-		return value
+		return value.replace('\n', r'\n')
 	@staticmethod
 	def from_string(value):
-		return value
+		return value.replace(r'\n', '\n')
 TypeManager.register_type(sa.String, String)
 
 class Integer(AbstractType):

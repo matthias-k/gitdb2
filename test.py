@@ -476,6 +476,11 @@ class TypeTests(unittest.TestCase):
 		self.assertEqual(data_types.TypeManager.type_dict[sa.Boolean].from_string('False'), False)
 		self.assertEqual(data_types.TypeManager.type_dict[sa.Boolean].from_string('None'), None)
 
+	def test_string(self):
+		self.assertEqual(data_types.TypeManager.type_dict[sa.String].to_string('foo\nbar'), 'foo\\nbar')
+		self.assertEqual(data_types.TypeManager.type_dict[sa.String].from_string('foo\\nbar'), 'foo\nbar')
+
+
 if __name__ == '__main__':
 	import sys
 	#if len(sys.argv)>1:
