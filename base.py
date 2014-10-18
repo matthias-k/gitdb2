@@ -90,10 +90,14 @@ class GitDBSession(object):
 		event.listen(session, "after_bulk_update", self.after_bulk_update)
 		
 		if self.Base:
-			for klazz in self.Base.__subclasses__():
-				event.listen(klazz.__mapper__, 'after_delete', self.after_delete)
-				event.listen(klazz.__mapper__, 'after_insert', self.after_insert)
-				event.listen(klazz.__mapper__, 'after_update', self.after_update)
+			def register_class(klazz):
+				if hasattr(klazz, '__mapper__'):
+					event.listen(klazz.__mapper__, 'after_delete', self.after_delete)
+					event.listen(klazz.__mapper__, 'after_insert', self.after_insert)
+					event.listen(klazz.__mapper__, 'after_update', self.after_update)
+				for sub_klazz in klazz.__subclasses__():
+					register_class(sub_klazz)
+			register_class(self.Base)
 	def close(self):
 		self.active=False
 		#self.after_commit = lambda *args: None
@@ -245,6 +249,36 @@ def construct_from_string(klazz, data):
 		setattr(new_object, new_object.__content__, content)
 	return new_object
 
+def construct_insert_values_from_string(klazz, data):
+	values = {}
+	parts = data.split('\n\n', 1)
+	if len(parts)>1:
+		meta, content = parts
+	else:
+		meta, content = parts[0], None
+	table_cols = klazz.__table__.columns.keys()
+	#name_dict = {klazz.__mapper__.columns[attr_name].name: attr_name for attr_name in klazz.__mapper__.columns.keys()}
+	for line in meta.split('\n'):
+		if line:
+			key, value=line.split(': ',1)
+			if key in table_cols:
+				col = klazz.__table__.columns[key]# klazz.__mapper__.columns[name_dict[key]]
+				for t in TypeManager.type_dict:
+					if isinstance(col.type, t):
+						real_value = TypeManager.type_dict[t].from_string(value)
+						break
+				else:
+					raise TypeError(col.type)
+				values[key] = real_value
+				#setattr(new_object, name_dict[key], real_value)
+	if content != None:
+		values[klazz.__content__] = content
+	for key in table_cols:
+		if key not in values:
+			values[key] = None
+		#setattr(new_object, new_object.__content__, content)
+	return values
+
 class GitDBRepo(object):
 	def __init__(self, Base, path, dbname='database.db'):
 		self.Base = Base
@@ -289,18 +323,29 @@ class GitDBRepo(object):
 			logging.info("Reusing database")
 		self.gitDBSession = GitDBSession(self.session, self.path, Base=self.Base)
 	def setup(self):
-		for klazz in self.Base.__subclasses__():
-			directory = os.path.join(self.path, klazz.__tablename__)
-			files = glob.glob(os.path.join(directory, '*'))
-			files = [f for f in files if not os.path.basename(f) == '_files']
-			for f in sorted(files):
-				logging.debug("Reading file %s" % f)
-				with codecs.open(f, encoding='utf-8') as f:
-					text = f.read()
-				obj = construct_from_string(klazz, text)
-				self.session.add(obj)
-			self.session.flush()
-			self.session.expire_all()
+		def read_class(klazz):
+			insert_entries = []
+			if hasattr(klazz, '__mapper__'):
+				directory = os.path.join(self.path, klazz.__tablename__)
+				files = glob.glob(os.path.join(directory, '*'))
+				files = [f for f in files if not os.path.basename(f) == '_files']
+				for f in sorted(files):
+					logging.debug("Reading file %s" % f)
+					with codecs.open(f, encoding='utf-8') as f:
+						text = f.read()
+					#obj = construct_from_string(klazz, text)
+					#print obj
+					#self.session.add(obj)
+					
+					insert_entries.append(construct_insert_values_from_string(klazz, text))
+					#print insert_entries[-1]
+				if insert_entries:
+					self.session.execute(klazz.__table__.insert(), insert_entries)
+					#self.session.flush()
+				#self.session.expire_all()
+			for sub_klazz in klazz.__subclasses__():
+				read_class(sub_klazz)
+		read_class(self.Base)
 		self.session.commit()
 	def getCurrentCommit(self):
 		out = self.gitCall(['rev-parse', 'HEAD'])
