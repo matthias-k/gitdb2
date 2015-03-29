@@ -24,6 +24,7 @@ class String(AbstractType):
 	def from_string(value):
 		return value.replace(r'\n', '\n')
 TypeManager.register_type(sa.String, String)
+TypeManager.register_type(sa.VARCHAR, String)
 
 class Integer(AbstractType):
 	@staticmethod

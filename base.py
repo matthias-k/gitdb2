@@ -133,39 +133,52 @@ class GitDBSession(object):
 		real_filename = os.path.join(self.path, filename)
 		makedirs(os.path.dirname(real_filename))
 		#print real_filename
-		with codecs.open(real_filename, 'w', encoding='utf-8') as outfile:
-			#print "Starting outfile"
-			if hasattr(obj, '__content__'):
-				content_name = obj.__content__
-			else:
-				content_name = None
-			for name in obj.__mapper__.columns.keys():
-				if name == content_name:
-					continue
-				col_name = obj.__mapper__.columns[name].name
-				value = getattr(obj, name)
-				if value is None:
-					continue
-				for t in TypeManager.type_dict:
-					if isinstance(obj.__mapper__.columns[name].type, t):
-						value_str = TypeManager.type_dict[t].to_string(value)
-						break
-				#print "line", col_name
-				#print value_str
-				line = u'{0}: {1}\n'.format(col_name, value_str)
-				#print line
-				#self.logger.debug('%r' % line)
-				outfile.write(line)
-				#print 'lab'
-			if content_name:
-				value = getattr(obj, content_name)
-				outfile.write('\n')
-				outfile.write(value)
-		#print "Done writing"
-		#self.logger.debug(filename)
-		self.written_files.append(filename)
-		#self.gitCall(['add', filename])
-		#print "Added"
+		
+		output = ''
+		
+		#print "Starting outfile"
+		if hasattr(obj, '__content__'):
+			content_name = obj.__content__
+		else:
+			content_name = None
+		for name in obj.__mapper__.columns.keys():
+			if name == content_name:
+				continue
+			col_name = obj.__mapper__.columns[name].name
+			value = getattr(obj, name)
+			if value is None:
+				continue
+			for t in TypeManager.type_dict:
+				if isinstance(obj.__mapper__.columns[name].type, t):
+					value_str = TypeManager.type_dict[t].to_string(value)
+					break
+			#print "line", col_name
+			#print value_str
+			line = u'{0}: {1}\n'.format(col_name, value_str)
+			#print line
+			#self.logger.debug('%r' % line)
+			output += line
+			#print 'lab'
+		if content_name:
+			value = getattr(obj, content_name)
+			output += '\n'
+			output += value
+		
+		do_write = True
+		if os.path.isfile(real_filename):
+			with codecs.open(real_filename, encoding='utf-8') as infile:
+				if infile.read() == output:
+					do_write = False
+		if do_write:
+			with codecs.open(real_filename, 'w', encoding='utf-8') as outfile:
+				outfile.write(output)
+			#print "Done writing"
+			#self.logger.debug(filename)
+			self.written_files.append(filename)
+			#self.gitCall(['add', filename])
+			#print "Added"
+		else:
+			print "Skipping file", real_filename, ", content not changed"
 	def deleteObject(self, obj):
 		#self.logger.debug("DELETE")
 		filename, oldfilename = self.getFilename(obj, old=True)
@@ -271,7 +284,7 @@ def construct_insert_values_from_string(klazz, data):
 					raise TypeError(col.type)
 				values[key] = real_value
 				#setattr(new_object, name_dict[key], real_value)
-	if content != None:
+	if content != None and hasattr(klazz, '__content__'):
 		values[klazz.__content__] = content
 	for key in table_cols:
 		if key not in values:
