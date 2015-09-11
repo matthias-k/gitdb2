@@ -1,13 +1,17 @@
 gitdb2
 ======
 
-This is a library that extends sqlalchemy databases to store their content in a directory of
-files that is managed by git. This makes synchronizing databases much easier.
+This is a library that extends sqlalchemy databases to store their content in a
+directory of files that is managed by git. This makes synchronizing databases
+much easier.
 
 Example
 -------
 
-In this simple example, a gitdb repo for a database with a single table will be constructed.
+In this simple example, a gitdb repo for a database with a single table will be
+constructed.
+
+.. code-block:: python
 
     import sqlalchemy as sa
     from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, ForeignKeyConstraint
@@ -29,11 +33,14 @@ In this simple example, a gitdb repo for a database with a single table will be 
     #The commit will save the object to an file and commit it in git.
     session.commit()
 
-    
+
 More complex example
 --------------------
 
-This advanced example shows that gitdb is able to handle relationships and association_proxies.
+This advanced example shows that gitdb is able to handle relationships and
+association_proxies.
+
+.. code-block:: python
 
     import sqlalchemy as sa
     from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, ForeignKeyConstraint
@@ -75,7 +82,7 @@ This advanced example shows that gitdb is able to handle relationships and assoc
     #change attribute
     test1.col2 = 'blub'
     session.commit()
-    
+
     #changing primary keys does work as well, the files will be moved.
     test1.id = 4
     session.commit()
@@ -86,12 +93,12 @@ Kown limitations
 *    In sqlite, one should use "passive_updates=False" for relationships,
      as sqlite does not cascade primary_key-updates. Also, if the database
      system does the updates, GitDB probably does not recognizes it (untested).
-   
+
 *    Also, many2many relationships via a secondary table do not work
      in GitDB, as GitDB has no access to the secondary table and thus cannot store it.
      Use association_proxies instead. Do not forget to set 'cascade="all, delete-orphan"'
      in order for association_proxy.remove() to work.
-   
+
 *    Bulk updates and bulk deletes are not supported at the moment (i.e., Query.update(),
      Query.delete(). This is because GitDB cannot get the precise rows updated or deleted.
      GitDB will raise an NotImplementedError if bulk updates or bulk deletes occur in its
