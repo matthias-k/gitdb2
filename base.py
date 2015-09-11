@@ -8,8 +8,10 @@ import os
 import errno
 import glob
 import codecs
+from time import sleep
 
 from data_types import TypeManager
+from git_handling import GitHandler
 
 import logging
 logger = logging.getLogger(__name__)
@@ -61,6 +63,7 @@ logger.setLevel(logging.INFO)
 #console.setFormatter(formatter)
 #logger.addHandler(console)
 
+
 def makedirs(dirname):
 	"""Creates the directories for dirname via os.makedirs, but does not raise
 	   an exception if the directory already exists and passes if dirname=""."""
@@ -73,7 +76,7 @@ def makedirs(dirname):
 			raise
 
 class GitDBSession(object):
-	def __init__(self, session, path, Base=None):
+	def __init__(self, session, path, Base=None, async=True):
 		#self.logger = logger.getChild('session')
 		self.session = session
 		self.new = set()
@@ -82,8 +85,8 @@ class GitDBSession(object):
 		self.path = path
 		self.Base = Base
 		self.active=True
-		self.written_files = []
-		self.deleted_files = []
+		self.async = async
+		self.git_handler = GitHandler(self.path, async=self.async)
 		event.listen(session, "after_commit", self.after_commit)
 		event.listen(session, "after_rollback", self.after_rollback)
 		event.listen(session, "after_bulk_delete", self.after_bulk_delete)
@@ -99,11 +102,9 @@ class GitDBSession(object):
 					register_class(sub_klazz)
 			register_class(self.Base)
 	def close(self):
+		self.git_handler.join()
 		self.active=False
-		#self.after_commit = lambda *args: None
-		#self.after_insert = lambda *args: None
-		#self.after_update = lambda *args: None
-		#self.after_delete = lambda *args: None
+
 	def getFilename(self, obj, old=True):
 		old_primary_keys = []
 		primary_keys = []
@@ -125,13 +126,14 @@ class GitDBSession(object):
 			return filename, oldfilename
 		else:
 			return filename
+
 	def writeObject(self, obj):
 		filename, oldfilename = self.getFilename(obj, old=True)
 		if oldfilename!=filename:
 			#self.logger.debug("Primarykey changed from {0} to {1}!".format(oldfilename, filename))
-			self.gitCall(['mv', oldfilename, filename])
+			self.git_handler.move_file(oldfilename, filename)
 		real_filename = os.path.join(self.path, filename)
-		makedirs(os.path.dirname(real_filename))
+		
 		#print real_filename
 		
 		output = ''
@@ -164,47 +166,25 @@ class GitDBSession(object):
 			output += '\n'
 			output += value
 		
-		do_write = True
-		if os.path.isfile(real_filename):
-			with codecs.open(real_filename, encoding='utf-8') as infile:
-				if infile.read() == output:
-					do_write = False
-		if do_write:
-			with codecs.open(real_filename, 'w', encoding='utf-8') as outfile:
-				outfile.write(output)
-			#print "Done writing"
-			#self.logger.debug(filename)
-			self.written_files.append(filename)
-			#self.gitCall(['add', filename])
-			#print "Added"
-		else:
-			print "Skipping file", real_filename, ", content not changed"
+		self.git_handler.write_file(filename, output)
+	
 	def deleteObject(self, obj):
 		#self.logger.debug("DELETE")
 		filename, oldfilename = self.getFilename(obj, old=True)
-		self.deleted_files.append(oldfilename)
-		self.gitCall(['rm', oldfilename])
+		
+		self.git_handler.remove_file(oldfilename)
+		
+
 	def after_commit(self, session):
 		if not self.active: return
 		print "pre After commit!!!"
-		if self.written_files or self.deleted_files:
-			if self.written_files:
-				self.gitCall(['add']+self.written_files)
-				self.written_files = []
-			self.deleted_files = []
-			actions = self.gitCall(['status', '--porcelain'])
-			actions = actions.replace('?? database.db\n', '')
-			actions = actions.replace('?? dbcommit\n', '')
-			if actions:
-				self.gitCall(['commit', '-m', actions])
-				self.saveCurrentCommit()
+		self.git_handler.commit()
+
 		print "post After commit!!!"
 	def after_rollback(self, session):
 		if not self.active: return
-		if self.written_files:
-			self.gitCall(['add']+self.written_files)
-			self.written_files = []
-		self.gitCall(['reset', '--hard', 'HEAD'])
+		self.git_handler.reset()
+		
 	def after_delete(self, mapper, connection, target):
 		if not self.active: return
 		#self.logger.debug("Instance %s being deleted" % target)
@@ -230,14 +210,6 @@ class GitDBSession(object):
 		if not self.active: return
 		#self.logger.debug("Instance %s being updated in %s" % (target, self))
 		self.writeObject(target)
-	def getCurrentCommit(self):
-		out = self.gitCall(['rev-parse', 'HEAD'])
-		return out.split('\n',1)[0].strip()
-	def saveCurrentCommit(self):
-		with open(os.path.join(self.path, 'dbcommit'), 'w') as dbcommit_file:
-			dbcommit_file.write(self.getCurrentCommit()+'\n')
-	def gitCall(self, args):
-		return sp.check_output(['git']+args, cwd = self.path)
 
 def construct_from_string(klazz, data):
 	new_object = klazz()

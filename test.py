@@ -98,6 +98,7 @@ class BaseSessionTest(unittest.TestCase):
 		self.session = Session()
 		self.GitDBSession = GitDBSession(self.session, self.test_dir, Base=self.Base)
 	def tearDown(self):
+		self.GitDBSession.close()
 		try:
 			shutil.rmtree(self.test_dir)
 			os.remove
@@ -399,6 +400,7 @@ class GitDBRepoTest(unittest.TestCase):
 		self.repo = GitDBRepo(self.Base, self.test_dir)
 		self.session = self.repo.session
 	def tearDown(self):
+		self.repo.close()
 		try:
 			shutil.rmtree(self.test_dir)
 			os.remove
