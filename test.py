@@ -140,17 +140,6 @@ class BaseSessionTest(unittest.TestCase):
 		self.newSession()
 		test1 = self.session.query(Test).get(1)
 		self.assertEqual(test1.foo, 'probe2')
-	def test_unicode(self):
-		class Test(self.Base):
-			__tablename__ = 'test'
-			id = Column(Integer, primary_key = True)
-			foo = Column(String)
-		self.initSession()
-		test = Test()
-		test.foo = u'üüüe'
-		self.session.add(test)
-		self.session.commit()
-		self.check_repository({'test': {'1.txt': u"id: 1\nfoo: üüüe\n"}})
 	def test_None(self):
 		class Test(self.Base):
 			__tablename__ = 'test'
