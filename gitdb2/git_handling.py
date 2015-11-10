@@ -39,16 +39,14 @@ class SynchronousGitHandler(object):
 			with codecs.open(real_filename, 'w', encoding='utf-8') as outfile:
 				outfile.write(content)
 			self.written_files.append(filename)
-		else:
-			print "Skipping file", real_filename, ", content not changed"
-	
+
 	def remove_file(self, filename):
 		self.deleted_files.append(filename)
 		self.gitCall(['rm', filename])
 
 	def move_file(self, old_filename, new_filename):
 		self.gitCall(['mv', old_filename, new_filename])
-	
+
 	def commit(self):
 		if self.written_files or self.deleted_files:
 			if self.written_files:
@@ -61,14 +59,14 @@ class SynchronousGitHandler(object):
 			if actions:
 				self.gitCall(['commit', '-m', actions])
 				self.saveCurrentCommit()
-	
+
 	def reset(self):
 		if self.written_files:
 			self.gitCall(['add']+self.written_files)
 			self.written_files = []
 		if os.path.isfile(os.path.join(self.path, 'dbcommit')):
 			self.gitCall(['reset', '--hard', 'HEAD'])
-		
+
 	def getCurrentCommit(self):
 		out = self.gitCall(['rev-parse', 'HEAD'])
 		return out.split('\n',1)[0].strip()
@@ -91,7 +89,6 @@ class GitHandlerThread(Thread):
 	def run(self):
 		while True:
 			item = self.queue.get()
-			print(item)
 			#try:
 			#	item = self.queue.get(timeout=0.1)
 			#except Empty:
@@ -124,13 +121,13 @@ class GitHandler(object):
 			# TODO: start queue
 		else:
 			self.handler = SynchronousGitHandler(path)
-	
+
 	def write_file(self, filename, content):
 		if self.async:
 			self.q.put(('write_file', filename, content))
 		else:
 			self.handler.write_file(filename, content)
-	
+
 	def remove_file(self, filename):
 		if self.async:
 			self.q.put(('remove_file', filename))
@@ -148,13 +145,13 @@ class GitHandler(object):
 			self.q.put(('commit',))
 		else:
 			self.handler.commit()
-	
+
 	def reset(self):
 		if self.async:
 			self.q.put(('reset',))
 		else:
 			self.handler.reset()
-	
+
 	def join(self):
 		if self.async:
 			while not self.q.empty():
