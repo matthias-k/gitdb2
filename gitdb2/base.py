@@ -22,18 +22,18 @@ logger.setLevel(logging.INFO)
    In sqlite, one should use "passive_updates=False" for relationships,
    as sqlite does not cascade primary_key-updates. Also, if the database
    system does the updates, GitDB probably does not recognizes it (untested).
-   
+
    Also, many2many relationships via a secondary table do not work
    in GitDB, as GitDB has no access to the secondary table and thus cannot store it.
    Use association_proxies instead. Do not forget to set 'cascade="all, delete-orphan"'
    in order for association_proxy.remove() to work.
-   
+
    Bulk updates and bulk deletes are not supported at the moment (i.e., Query.update(),
    Query.delete(). This is because GitDB cannot get the precise rows updated or deleted.
    GitDB will raise an NotImplementedError if bulk updates or bulk deletes occur in its
    session. In a later version, this might be overcome by explicitly checking all objects
    of the respective table and e.g., delete all files without a table row.
-   
+
    newlines in string columns are escaped to r'\n' when saved to file.
 """
 
@@ -42,13 +42,13 @@ logger.setLevel(logging.INFO)
   #def __init__(self, fmt=None, datefmt=None, encoding='windows-1250'):
     #logging.Formatter.__init__(self, fmt, datefmt)
     #self.encoding = encoding
- 
+
   #def formatException(self, ei):
     #r = logging.Formatter.formatException(self, ei)
     #if type(r) in [types.StringType]:
       #r = r.decode('windows-1250', 'replace') # Convert to unicode
     #return r
- 
+
   #def format(self, record):
     #t = logging.Formatter.format(self, record)
     #if type(t) in [types.UnicodeType]:
@@ -91,7 +91,7 @@ class GitDBSession(object):
 		event.listen(session, "after_rollback", self.after_rollback)
 		event.listen(session, "after_bulk_delete", self.after_bulk_delete)
 		event.listen(session, "after_bulk_update", self.after_bulk_update)
-		
+
 		if self.Base:
 			def register_class(klazz):
 				if hasattr(klazz, '__mapper__'):
@@ -133,11 +133,11 @@ class GitDBSession(object):
 			#self.logger.debug("Primarykey changed from {0} to {1}!".format(oldfilename, filename))
 			self.git_handler.move_file(oldfilename, filename)
 		real_filename = os.path.join(self.path, filename)
-		
+
 		#print real_filename
-		
+
 		output = ''
-		
+
 		#print "Starting outfile"
 		if hasattr(obj, '__content__'):
 			content_name = obj.__content__
@@ -165,15 +165,15 @@ class GitDBSession(object):
 			value = getattr(obj, content_name)
 			output += '\n'
 			output += value
-		
+
 		self.git_handler.write_file(filename, output)
-	
+
 	def deleteObject(self, obj):
 		#self.logger.debug("DELETE")
 		filename, oldfilename = self.getFilename(obj, old=True)
-		
+
 		self.git_handler.remove_file(oldfilename)
-		
+
 
 	def after_commit(self, session):
 		if not self.active: return
@@ -184,7 +184,7 @@ class GitDBSession(object):
 	def after_rollback(self, session):
 		if not self.active: return
 		self.git_handler.reset()
-		
+
 	def after_delete(self, mapper, connection, target):
 		if not self.active: return
 		#self.logger.debug("Instance %s being deleted" % target)
@@ -194,7 +194,7 @@ class GitDBSession(object):
 		raise NotImplementedError('GitDB cannot yet handle bulk deletes!')
 		affected_table = query_context.statement.froms[0]
 		print affected_table
-		#affected_rows = query_context.statement.execute().fetchall() 
+		#affected_rows = query_context.statement.execute().fetchall()
 		affected_rows = session.execute(query_context.statement).fetchall()
 		print affected_rows
 		for res in  result.fetchall():
@@ -265,10 +265,11 @@ def construct_insert_values_from_string(klazz, data):
 	return values
 
 class GitDBRepo(object):
-	def __init__(self, Base, path, dbname='database.db'):
+	def __init__(self, Base, path, dbname='database.db', async=True):
 		self.Base = Base
 		self.path = path
 		self.dbname = dbname
+        self.async = async
 		databasepath = os.path.join(self.path, self.dbname)
 		if not os.path.exists(databasepath):
 			self.startDatabase(refresh=True)
@@ -294,7 +295,7 @@ class GitDBRepo(object):
 		makedirs(os.path.dirname(self.path))
 		dbengine = 'sqlite'
 		enginepath = '{engine}:///{databasename}'.format(engine=dbengine, databasename = databasename)
-		
+
 		self.engine = sa.create_engine(enginepath)
 		if refresh:
 			self.Base.metadata.create_all(self.engine)
@@ -306,7 +307,9 @@ class GitDBRepo(object):
 			self.saveCurrentCommit()
 		else:
 			logging.info("Reusing database")
-		self.gitDBSession = GitDBSession(self.session, self.path, Base=self.Base)
+		self.gitDBSession = GitDBSession(self.session, self.path,
+                                         Base=self.Base.
+                                         async=self.async)
 	def setup(self):
 		def read_class(klazz):
 			insert_entries = []
@@ -321,7 +324,7 @@ class GitDBRepo(object):
 					#obj = construct_from_string(klazz, text)
 					#print obj
 					#self.session.add(obj)
-					
+
 					insert_entries.append(construct_insert_values_from_string(klazz, text))
 					#print insert_entries[-1]
 				if insert_entries:
