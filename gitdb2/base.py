@@ -308,7 +308,7 @@ class GitDBRepo(object):
         else:
             logging.info("Reusing database")
         self.gitDBSession = GitDBSession(self.session, self.path,
-                                         Base=self.Base.
+                                         Base=self.Base,
                                          async=self.async)
     def setup(self):
         def read_class(klazz):
