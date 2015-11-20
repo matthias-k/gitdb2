@@ -1,3 +1,5 @@
+from __future__ import print_function, absolute_import, division
+
 from sqlalchemy.orm import attributes, sessionmaker
 from sqlalchemy import event
 import sqlalchemy as sa
@@ -177,10 +179,10 @@ class GitDBSession(object):
 
     def after_commit(self, session):
         if not self.active: return
-        print "pre After commit!!!"
+        print("pre After commit!!!")
         self.git_handler.commit()
 
-        print "post After commit!!!"
+        print("post After commit!!!")
     def after_rollback(self, session):
         if not self.active: return
         self.git_handler.reset()
@@ -193,12 +195,12 @@ class GitDBSession(object):
         if not self.active: return
         raise NotImplementedError('GitDB cannot yet handle bulk deletes!')
         affected_table = query_context.statement.froms[0]
-        print affected_table
+        print(affected_table)
         #affected_rows = query_context.statement.execute().fetchall()
         affected_rows = session.execute(query_context.statement).fetchall()
-        print affected_rows
+        print(affected_rows)
         for res in  result.fetchall():
-            print res
+            print(res)
     def after_bulk_update(self, session, query, query_context, result):
         if not self.active: return
         raise NotImplementedError('GitDB cannot yet handle bulk updates!')
