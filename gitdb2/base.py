@@ -12,8 +12,8 @@ import glob
 import codecs
 from time import sleep
 
-from data_types import TypeManager
-from git_handling import GitHandler
+from .data_types import TypeManager
+from .git_handling import GitHandler
 
 import logging
 logger = logging.getLogger(__name__)
