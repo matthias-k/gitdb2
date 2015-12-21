@@ -1,7 +1,7 @@
 from __future__ import print_function, division, absolute_import
 
 
-from Queue import Queue, Empty
+from six.moves.queue import Queue, Empty
 
 from threading import Thread, Event
 import signal
