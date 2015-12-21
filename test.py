@@ -7,6 +7,7 @@ import os
 import shutil
 import datetime
 import codecs
+import subprocess as sp
 
 import sqlalchemy as sa
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, ForeignKeyConstraint
@@ -16,8 +17,8 @@ from sqlalchemy.ext.orderinglist import ordering_list
 
 from sqlalchemy.ext.associationproxy import association_proxy
 
-from base import *
-import data_types
+from gitdb2 import *
+from gitdb2 import data_types
 
 
 #@sa.event.listens_for(sa.engine.Engine, "connect")
@@ -456,7 +457,7 @@ class GitDBRepoTest(unittest.TestCase):
 		test = self.session.query(Test).one()
 		self.assertFalse(hasattr(test, '_foo'))
 		self.assertEqual(test.foo, "blub")
-		
+
 class TypeTests(unittest.TestCase):
 	def test_bool(self):
 		self.assertEqual(data_types.TypeManager.type_dict[sa.Boolean].to_string(True), 'True')
@@ -477,7 +478,7 @@ if __name__ == '__main__':
 	#if len(sys.argv)>1:
 	#	unittest.defaultTestLoader.testMethodPrefix = sys.argv[1]
 	unittest.main(verbosity=2)
-   
+
 if False:
 	if True:#session is None:
 		import os
@@ -496,7 +497,7 @@ if False:
 	#event.listen(Session, "after_flush", my_after_flush)
 	#event.listen(Session, "after_flush_postexec", my_after_flush)
 	#event.listen(Session, "after_commit", my_after_commit)
-	
+
 	#def some_listener(mapper, connection, target):
 	#	print "Instance %s being inserted" % target
 
@@ -506,16 +507,16 @@ if False:
 
 	# attach to all mappers
 	#event.listen(mapper, 'after_delete', some_listener_delete)
-	
+
 	#def after_bulk_delete(session, query, query_context, result):
 	#	print "AFTER_BULK"
 	#	affected_table = query_context.statement.froms[0]
 	#	print affected_table
-	#	affected_rows = query_context.statement.execute().fetchall() 
+	#	affected_rows = query_context.statement.execute().fetchall()
 	#	print affected_rows
 
 	#sqlalchemy.event.listen(session, "after_bulk_delete", after_bulk_delete)
-	
+
 	test1 = Test1()
 	test1.col2 = 'bla'
 	test1.test2s.append(Test2())
@@ -524,7 +525,7 @@ if False:
 	#change attribute
 	test1.col2 = 'blub'
 	session.commit()
-	
+
 	#change primary key
 	test1.id = 4
 	session.commit()
