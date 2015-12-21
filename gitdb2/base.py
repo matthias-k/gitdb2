@@ -342,6 +342,8 @@ class GitDBRepo(object):
         return out.split('\n',1)[0].strip()
     def saveCurrentCommit(self):
         out, err = sp.Popen(['git', 'rev-parse', 'HEAD'], stdout = sp.PIPE, stderr=sp.PIPE, cwd = self.path).communicate()
+        out = out.decode('utf-8', 'ignore')
+        err = err.decode('utf-8', 'ignore')
         if err:
             if not 'unknown revision or path not in the working tree' in err:
                 raise sp.CalledProcessError(err)
@@ -349,7 +351,7 @@ class GitDBRepo(object):
             with open(os.path.join(self.path, 'dbcommit'), 'w') as dbcommit_file:
                 dbcommit_file.write(out.split('\n',1)[0]+'\n')
     def gitCall(self, args):
-        return sp.check_output(['git']+args, cwd = self.path)
+        return sp.check_output(['git']+args, cwd = self.path).decode('utf-8', 'ignore')
     def close(self):
         self.gitDBSession.close()
         self.session.close()
