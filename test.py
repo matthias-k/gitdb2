@@ -9,6 +9,9 @@ import datetime
 import codecs
 import subprocess as sp
 
+from nose.tools import assert_equal
+import pygit2
+
 import sqlalchemy as sa
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, ForeignKeyConstraint
 from sqlalchemy.orm import relationship, backref, attributes
@@ -54,6 +57,25 @@ from gitdb2 import data_types
     #def __init__(self, test2=None, test1=None):
         #self.test2=test2
         #self.test1=test1
+
+
+def compare_tree(repo, tree, data):
+    files = set([e.name for e in tree])
+    needed_files = set(data.keys)
+    assert_equal(needed_files, files)
+
+    for f in data:
+        tree_entry = tree[f]
+        if isinstance(data[f], dict):
+            assert_equal(tree_entry.filemode, pygit2.GIT_FILEMODE_TREE)
+            sub_tree = repo[tree_entry.id]
+            compare_tree(repo, sub_tree, data[f])
+        else:
+            assert_equal(tree_entry.filemode, pygit2.GIT_FILEMODE_BLOB)
+            blob = repo[tree_entry.id]
+            content = blob.data.decode('utf-8')
+            assert_equal(content, data[f])
+
 
 class BaseSessionTest(unittest.TestCase):
     test_dir = 'unittest_repo'

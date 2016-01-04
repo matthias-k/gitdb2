@@ -1,7 +1,7 @@
 from __future__ import print_function, division, absolute_import, unicode_literals
 
-
 from six.moves.queue import Queue, Empty
+from six import text_type, binary_type
 
 from threading import Thread, Event
 import signal
@@ -11,6 +11,15 @@ import codecs
 import subprocess as sp
 import errno
 from time import sleep
+import warnings
+
+empty_tree_id = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
+
+try:
+    from pygit2 import Repository, GIT_FILEMODE_BLOB, GIT_FILEMODE_TREE, Signature
+    from pygit2 import hash as git_hash
+except ImportError:
+    print("Could not import pygit2, trying without it")
 
 def makedirs(dirname):
     """Creates the directories for dirname via os.makedirs, but does not raise
@@ -22,6 +31,206 @@ def makedirs(dirname):
     except OSError as e:
         if e.errno != errno.EEXIST:
             raise
+
+
+def full_split(filename):
+    head, tail = os.path.split(filename)
+    parts = [tail]
+    while head:
+        head, tail = os.path.split(head)
+        parts.insert(0, tail)
+    return parts
+
+
+def insert_into_tree(repo, tree, filename, oid, attr):
+    """
+    insert oid as filename into tree, possibly including subdirectories.
+    Will return id of new tree.
+    """
+    parts = full_split(filename)
+    assert len(parts) > 0
+    if len(parts) > 1:
+        #Create or get tree
+        sub_directory = parts[0]
+        sub_filename = os.path.join(*parts[1:])
+        if tree is not None and sub_directory in tree:
+            sub_tree = repo[tree[sub_directory].id]
+        else:
+            sub_tree = None
+
+        oid = insert_blob_into_tree(repo, sub_tree, oid, sub_filename)
+        mode = GIT_FILEMODE_TREE
+        filename = sub_directory
+    else:
+        # insert in this tree
+        mode = attr
+
+    # do the actual insert
+    if tree is None:
+        tree_builder = repo.TreeBuilder()
+    else:
+        tree_builder = repo.TreeBuilder(tree)
+    tree_builder.insert(filename, oid, mode)
+    new_tree_id = tree_builder.write()
+    return new_tree_id
+
+
+def insert_blob_into_tree(repo, tree, blob_id, filename):
+    """
+    insert blob as filename into tree, possibly including subdirectories.
+    Will return id of new tree.
+    """
+    return insert_into_tree(repo, tree, filename, blob_id, GIT_FILEMODE_BLOB)
+
+
+def remove_file_from_tree(repo, tree, filename):
+    """
+    remove filename from tree, recursivly removing empty subdirectories.
+    Will return id of new tree.
+    """
+    if tree is None:
+        tree_builder = repo.TreeBuilder()
+    else:
+        tree_builder = repo.TreeBuilder(tree)
+
+    parts = full_split(filename)
+    assert len(parts) > 0
+    if len(parts) > 1:
+        sub_directory = parts[0]
+        sub_filename = os.path.join(*parts[1:])
+        sub_tree_entry = tree_builder.get(sub_directory)
+        if not sub_tree_entry:
+            return tree.id
+        sub_tree = repo[sub_tree_entry.id]
+        new_sub_tree_id = remove_file_from_tree(repo, sub_tree, sub_filename)
+
+        if new_sub_tree_id == empty_tree_id:
+            filename = sub_directory
+        else:
+            filename = None
+
+    # remove from this tree
+    if filename and tree_builder.get(filename):
+        tree_builder.remove(filename)
+    new_tree_id = tree_builder.write()
+    return new_tree_id
+
+
+def move_file_in_tree(repo, tree, old_filename, new_filename):
+    tree_entry = get_tree_entry(repo, tree, old_filename)
+    if not tree_entry:
+        raise ValueError('filename not in tree: {}'.format(old_filename))
+    oid = tree_entry.id
+    filemode = tree_entry.filemode
+
+    new_tree_id = remove_file_from_tree(repo, tree, old_filename)
+    new_tree = repo[new_tree_id]
+    return insert_into_tree(repo, new_tree, new_filename, oid, filemode)
+
+
+def get_tree_entry(repo, tree, filename):
+    """Recurse through tree. If filename is in tree, returns tree entry.
+    Otherwise returns None"""
+    parts = full_split(filename)
+    if len(parts) == 1:
+        name = parts[0]
+        if name in tree:
+            return tree[name]
+        else:
+            return None
+    else:
+        sub_directory = parts[0]
+        sub_filename = os.path.join(*parts[1:])
+        if sub_directory not in tree:
+            return None
+        sub_tree = repo[tree[sub_directory].id]
+        return get_tree_entry(repo, sub_tree, sub_filename)
+
+
+class LibGit2GitHandler(object):
+    def __init__(self, path, repo_path=None):
+        self.path = path
+        if repo_path is None:
+            repo_path = self.path #os.path.join(self.path, 'repository')
+        self.repo_path = repo_path
+        self.repo = Repository(self.repo_path)
+        self.working_tree = self.get_last_tree()
+        self.messages = []
+        print("Started libgit2 git handler in ", self.path)
+
+    def get_last_tree(self):
+        if self.repo.head_is_unborn:
+            tree_id = self.repo.TreeBuilder().write()
+            return self.repo[tree_id]
+        commit = self.repo[self.getCurrentCommit()]
+        return commit.tree
+
+    def insert_into_working_tree(self, blob_id, filename):
+        tree_id = insert_blob_into_tree(self.repo, self.working_tree, blob_id, filename)
+        self.working_tree = self.repo[tree_id]
+
+    def remove_from_working_tree(self, filename):
+        tree_id = remove_file_from_tree(self.repo, self.working_tree, filename)
+        self.working_tree = self.repo[tree_id]
+
+    def write_file(self, filename, content):
+        # TODO: combine writing many files
+        assert isinstance(content, text_type)
+        data = content.encode('utf-8')
+        existing_entry = get_tree_entry(self.repo, self.working_tree, filename)
+        if existing_entry:
+            type = 'M'
+            if existing_entry.id == git_hash(data):
+                return
+        else:
+            type = 'A'
+        blob_id = self.repo.create_blob(data)
+        self.insert_into_working_tree(blob_id, filename)
+        self.messages.append('    {}  {}'.format(type, filename))
+
+    def remove_file(self, filename):
+        existing_entry = get_tree_entry(self.repo, self.working_tree, filename)
+        if existing_entry:
+            self.remove_from_working_tree(filename)
+            self.messages.append('    D  {}'.format(filename))
+
+    def move_file(self, old_filename, new_filename):
+        move_file_in_tree(self.repo, self.working_tree, old_filename, new_filename)
+        self.messages.append('    R  {} -> {}'.format(old_filename, new_filename))
+
+    def commit(self):
+        if self.repo.head_is_unborn:
+            parents = []
+        else:
+            commit = self.repo[self.getCurrentCommit()]
+            if commit.tree.id == self.working_tree.id:
+                return
+            parents = [commit.id]
+
+        config = self.repo.config
+        author = Signature(config['user.name'], config['user.email'])
+        committer = Signature(config['user.name'], config['user.email'])
+        tree_id = self.working_tree.id
+        message = '\n'.format(self.messages)
+        self.repo.create_commit('refs/heads/master',
+                                author, committer, message,
+                                tree_id,
+                                parents)
+        self.saveCurrentCommit()
+        self.messages = []
+        if not self.repo.is_bare:
+            self.repo.checkout_head()
+
+    def reset(self):
+        self.working_tree = self.get_last_tree()
+        self.messages = []
+
+    def getCurrentCommit(self):
+        return self.repo.head.target
+
+    def saveCurrentCommit(self):
+        with open(os.path.join(self.path, 'dbcommit'), 'w') as dbcommit_file:
+            dbcommit_file.write(self.getCurrentCommit().hex+'\n')
 
 
 class SynchronousGitHandler(object):
@@ -125,7 +334,8 @@ class GitHandler(object):
             self.t.start()
             # TODO: start queue
         else:
-            self.handler = SynchronousGitHandler(path)
+            self.handler = LibGit2GitHandler(path)
+            #self.handler = SynchronousGitHandler(path)
 
     def write_file(self, filename, content):
         if self.async:
