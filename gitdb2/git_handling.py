@@ -92,6 +92,7 @@ def remove_file_from_tree(repo, tree, filename):
         tree_builder = repo.TreeBuilder()
     else:
         tree_builder = repo.TreeBuilder(tree)
+    print(list(tree))
 
     parts = full_split(filename)
     assert len(parts) > 0
@@ -107,12 +108,16 @@ def remove_file_from_tree(repo, tree, filename):
         if new_sub_tree_id == empty_tree_id:
             filename = sub_directory
         else:
+            tree_builder.insert(sub_directory, new_tree_id, GIT_FILEMODE_TREE)
             filename = None
 
     # remove from this tree
     if filename and tree_builder.get(filename):
+        print("removing", filename)
         tree_builder.remove(filename)
     new_tree_id = tree_builder.write()
+    new_tree = repo[new_tree_id]
+    print('new_tree', list(new_tree))
     return new_tree_id
 
 

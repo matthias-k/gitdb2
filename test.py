@@ -59,7 +59,21 @@ from gitdb2 import data_types
         #self.test1=test1
 
 
+def tree_to_data(repo, tree):
+    data = []
+    for tree_entry in tree:
+        if tree_entry.filemode == pygit2.GIT_FILEMODE_TREE:
+            sub_tree = repo[tree_entry.id]
+            data[tree_entry.name] = tree_to_data(repo, sub_tree)
+        else:
+            blob = repo[tree_entry.id]
+            data[tree_entry.name] = blob.data.decode('utf-8')
+
+
 def compare_tree(repo, tree, data):
+    tree_data = tree_to_data(tree)
+    assert_equal(data, tree_data)
+    return
     files = set([e.name for e in tree])
     needed_files = set(data.keys)
     assert_equal(needed_files, files)
@@ -87,6 +101,7 @@ class BaseSessionTest(unittest.TestCase):
         sp.check_output(['git', 'init'], cwd=self.test_dir)
     def check_repository(self, repo_data):
         def check_directory(directory, data):
+            print(directory, data)
             files = os.listdir(directory)
             files = [f for f in files if not f in ['.git', 'test.db', 'dbcommit']]
             files = set(files)
@@ -124,7 +139,7 @@ class BaseSessionTest(unittest.TestCase):
         self.GitDBSession = GitDBSession(self.session, self.test_dir, Base=self.Base, async=False)
     def tearDown(self):
         self.GitDBSession.close()
-        shutil.rmtree(self.test_dir)
+        #shutil.rmtree(self.test_dir)
     def test_init_session(self):
         class Test(self.Base):
             __tablename__ = 'test'
@@ -390,6 +405,7 @@ class GitDBRepoTest(unittest.TestCase):
         sp.check_output(['git', 'init'], cwd=self.test_dir)
     def check_repository(self, repo_data):
         def check_directory(directory, data):
+            print(directory, data)
             files = os.listdir(directory)
             files = [f for f in files if not f in ['.git', 'database.db', 'dbcommit']]
             files = set(files)
@@ -412,12 +428,12 @@ class GitDBRepoTest(unittest.TestCase):
         self.session = self.repo.session
     def tearDown(self):
         self.repo.close()
-        try:
-            shutil.rmtree(self.test_dir)
-            os.remove
-        except OSError as e:
-            if not e.errno == errno.ENOENT:
-                raise
+        #try:
+        #    shutil.rmtree(self.test_dir)
+        #    os.remove
+        #except OSError as e:
+        #    if not e.errno == errno.ENOENT:
+        #        raise
     def test_init_repo(self):
         class Test(self.Base):
             __tablename__ = 'test'
