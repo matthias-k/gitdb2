@@ -88,7 +88,7 @@ class BaseSessionTest(unittest.TestCase):
         self.Base.metadata.create_all(engine)
         Session = sqlalchemy.orm.sessionmaker(bind=engine)
         self.session = Session()
-        self.GitDBSession = GitDBSession(self.session, self.test_dir, Base=self.Base)
+        self.GitDBSession = GitDBSession(self.session, self.test_dir, Base=self.Base, async=False)
     def newSession(self):
         self.GitDBSession.close()
         self.session.close()
@@ -99,15 +99,10 @@ class BaseSessionTest(unittest.TestCase):
         engine = sqlalchemy.create_engine(enginepath, echo=False)
         Session = sqlalchemy.orm.sessionmaker(bind=engine)
         self.session = Session()
-        self.GitDBSession = GitDBSession(self.session, self.test_dir, Base=self.Base)
+        self.GitDBSession = GitDBSession(self.session, self.test_dir, Base=self.Base, async=False)
     def tearDown(self):
         self.GitDBSession.close()
-        try:
-            shutil.rmtree(self.test_dir)
-            os.remove
-        except OSError as e:
-            if not e.errno == errno.ENOENT:
-                raise
+        shutil.rmtree(self.test_dir)
     def test_init_session(self):
         class Test(self.Base):
             __tablename__ = 'test'
@@ -367,6 +362,8 @@ class GitDBRepoTest(unittest.TestCase):
     test_dir = 'unittest_repo'
     def setUp(self):
         self.Base = sqlalchemy.ext.declarative.declarative_base()
+        if os.path.isdir(self.test_dir):
+            shutil.rmtree(self.test_dir)
         os.makedirs(self.test_dir)
         sp.check_output(['git', 'init'], cwd=self.test_dir)
     def check_repository(self, repo_data):
@@ -383,13 +380,13 @@ class GitDBRepoTest(unittest.TestCase):
                     self.assertEqual(open(os.path.join(directory, f)).read(), data[f])
         check_directory(self.test_dir, repo_data)
     def initRepo(self):
-        self.repo = GitDBRepo.init(self.Base, self.test_dir)
+        self.repo = GitDBRepo(self.Base, self.test_dir, async=False)
         self.session = self.repo.session
     def restartRepo(self, reloadDatabase=False):
         self.repo.close()
         if reloadDatabase:
             os.remove(os.path.join(self.test_dir, 'database.db'))
-        self.repo = GitDBRepo(self.Base, self.test_dir)
+        self.repo = GitDBRepo(self.Base, self.test_dir, async=False)
         self.session = self.repo.session
     def tearDown(self):
         self.repo.close()
