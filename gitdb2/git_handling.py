@@ -130,8 +130,10 @@ def move_file_in_tree(repo, tree, old_filename, new_filename):
 
     new_tree_id = remove_file_from_tree(repo, tree, old_filename)
     new_tree = repo[new_tree_id]
-    print(list(new_tree))
-    return insert_into_tree(repo, new_tree, new_filename, oid, filemode)
+    new_tree_id = insert_into_tree(repo, new_tree, new_filename, oid, filemode)
+    #new_tree = repo[new_tree_id]
+
+    return new_tree_id
 
 
 def get_tree_entry(repo, tree, filename):
