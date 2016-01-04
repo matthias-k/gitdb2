@@ -14,6 +14,7 @@ from time import sleep
 
 from .data_types import TypeManager
 from .git_handling import GitHandler
+from pygit2 import Repository
 
 import logging
 logger = logging.getLogger(__name__)
@@ -270,6 +271,7 @@ class GitDBRepo(object):
     def __init__(self, Base, path, dbname='database.db', async=True):
         self.Base = Base
         self.path = path
+        self.repo = Repository(self.path)
         self.dbname = dbname
         self.async = async
         databasepath = os.path.join(self.path, self.dbname)
@@ -316,25 +318,21 @@ class GitDBRepo(object):
         def read_class(klazz):
             insert_entries = []
             if hasattr(klazz, '__mapper__'):
-                directory = os.path.join(self.path, klazz.__tablename__)
-                files = glob.glob(os.path.join(directory, '*'))
-                files = [f for f in files if not os.path.basename(f) == '_files']
-                for f in sorted(files):
-                    logging.debug("Reading file %s" % f)
-                    with codecs.open(f, encoding='utf-8') as f:
-                        text = f.read()
-                    #obj = construct_from_string(klazz, text)
-                    #print obj
-                    #self.session.add(obj)
+                root_tree = self.repo[self.repo.head.target].tree
+                if klazz.__tablename__ in root_tree:
+                    sub_tree = self.repo[root_tree[klazz.__tablename__].id]
+                    for tree_entry in sub_tree:
+                        print("Reading blob %s/%s" % (klazz.__tablename__, tree_entry.name))
+                        text = self.repo[tree_entry.id].data.decode('utf-8')
+                        insert_entries.append(construct_insert_values_from_string(klazz, text))
 
-                    insert_entries.append(construct_insert_values_from_string(klazz, text))
-                    #print insert_entries[-1]
-                if insert_entries:
-                    self.session.execute(klazz.__table__.insert(), insert_entries)
-                    #self.session.flush()
-                #self.session.expire_all()
+                    if insert_entries:
+                        self.session.execute(klazz.__table__.insert(), insert_entries)
             for sub_klazz in klazz.__subclasses__():
                 read_class(sub_klazz)
+
+        if self.repo.head_is_unborn:
+            return
         read_class(self.Base)
         self.session.commit()
     def getCurrentCommit(self):
