@@ -224,7 +224,7 @@ class LibGit2GitHandler(object):
         self.saveCurrentCommit()
         self.messages = []
         if not self.repo.is_bare:
-            self.repo.checkout_head()
+            self.repo.checkout_head(strategy=pygit2.GIT_CHECKOUT_FORCE)
 
     def reset(self):
         self.working_tree = self.get_last_tree()
