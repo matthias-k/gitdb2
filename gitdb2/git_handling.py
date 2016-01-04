@@ -13,11 +13,12 @@ import errno
 from time import sleep
 import warnings
 
-empty_tree_id = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
 
 try:
-    from pygit2 import Repository, GIT_FILEMODE_BLOB, GIT_FILEMODE_TREE, GIT_CHECKOUT_FORCE, Signature
+    from pygit2 import Repository, GIT_FILEMODE_BLOB, GIT_FILEMODE_TREE, GIT_CHECKOUT_FORCE, Signature, Oid
     from pygit2 import hash as git_hash
+
+    empty_tree_id = Oid(hex='4b825dc642cb6eb9a060e54bf8d69288fbee4904')
 except ImportError:
     print("Could not import pygit2, trying without it")
 
@@ -104,6 +105,7 @@ def remove_file_from_tree(repo, tree, filename):
             return tree.id
         sub_tree = repo[sub_tree_entry.id]
         new_sub_tree_id = remove_file_from_tree(repo, sub_tree, sub_filename)
+        new_sub_tree = repo[new_sub_tree_id]
 
         if new_sub_tree_id == empty_tree_id:
             filename = sub_directory
@@ -113,11 +115,9 @@ def remove_file_from_tree(repo, tree, filename):
 
     # remove from this tree
     if filename and tree_builder.get(filename):
-        print("removing", filename)
         tree_builder.remove(filename)
     new_tree_id = tree_builder.write()
     new_tree = repo[new_tree_id]
-    print('new_tree', list(new_tree))
     return new_tree_id
 
 
@@ -130,6 +130,7 @@ def move_file_in_tree(repo, tree, old_filename, new_filename):
 
     new_tree_id = remove_file_from_tree(repo, tree, old_filename)
     new_tree = repo[new_tree_id]
+    print(list(new_tree))
     return insert_into_tree(repo, new_tree, new_filename, oid, filemode)
 
 
@@ -216,7 +217,8 @@ class LibGit2GitHandler(object):
         author = Signature(config['user.name'], config['user.email'])
         committer = Signature(config['user.name'], config['user.email'])
         tree_id = self.working_tree.id
-        message = '\n'.format(self.messages)
+        message = '\n'.join(self.messages)
+        print("message", message)
         self.repo.create_commit('refs/heads/master',
                                 author, committer, message,
                                 tree_id,
