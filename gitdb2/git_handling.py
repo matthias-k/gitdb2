@@ -16,7 +16,7 @@ import warnings
 empty_tree_id = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
 
 try:
-    from pygit2 import Repository, GIT_FILEMODE_BLOB, GIT_FILEMODE_TREE, Signature
+    from pygit2 import Repository, GIT_FILEMODE_BLOB, GIT_FILEMODE_TREE, GIT_CHECKOUT_FORCE, Signature
     from pygit2 import hash as git_hash
 except ImportError:
     print("Could not import pygit2, trying without it")
@@ -224,7 +224,7 @@ class LibGit2GitHandler(object):
         self.saveCurrentCommit()
         self.messages = []
         if not self.repo.is_bare:
-            self.repo.checkout_head(strategy=pygit2.GIT_CHECKOUT_FORCE)
+            self.repo.checkout_head(strategy=GIT_CHECKOUT_FORCE)
 
     def reset(self):
         self.working_tree = self.get_last_tree()
