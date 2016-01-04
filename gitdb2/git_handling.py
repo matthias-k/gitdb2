@@ -108,7 +108,7 @@ def remove_file_from_tree(repo, tree, filename):
         if new_sub_tree_id == empty_tree_id:
             filename = sub_directory
         else:
-            tree_builder.insert(sub_directory, new_tree_id, GIT_FILEMODE_TREE)
+            tree_builder.insert(sub_directory, new_sub_tree_id, GIT_FILEMODE_TREE)
             filename = None
 
     # remove from this tree
