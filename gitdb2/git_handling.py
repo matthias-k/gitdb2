@@ -93,7 +93,6 @@ def remove_file_from_tree(repo, tree, filename):
         tree_builder = repo.TreeBuilder()
     else:
         tree_builder = repo.TreeBuilder(tree)
-    print(list(tree))
 
     parts = full_split(filename)
     assert len(parts) > 0
@@ -122,6 +121,7 @@ def remove_file_from_tree(repo, tree, filename):
 
 
 def move_file_in_tree(repo, tree, old_filename, new_filename):
+    print("{} -> {}".format(old_filename, new_filename))
     tree_entry = get_tree_entry(repo, tree, old_filename)
     if not tree_entry:
         raise ValueError('filename not in tree: {}'.format(old_filename))
@@ -203,7 +203,8 @@ class LibGit2GitHandler(object):
             self.messages.append('    D  {}'.format(filename))
 
     def move_file(self, old_filename, new_filename):
-        move_file_in_tree(self.repo, self.working_tree, old_filename, new_filename)
+        tree_id = move_file_in_tree(self.repo, self.working_tree, old_filename, new_filename)
+        self.working_tree = self.repo[tree_id]
         self.messages.append('    R  {} -> {}'.format(old_filename, new_filename))
 
     def commit(self):
@@ -220,7 +221,6 @@ class LibGit2GitHandler(object):
         committer = Signature(config['user.name'], config['user.email'])
         tree_id = self.working_tree.id
         message = '\n'.join(self.messages)
-        print("message", message)
         self.repo.create_commit('refs/heads/master',
                                 author, committer, message,
                                 tree_id,
