@@ -23,6 +23,7 @@ try:
 except ImportError:
     print("Could not import pygit2, trying without it")
 
+
 def makedirs(dirname):
     """Creates the directories for dirname via os.makedirs, but does not raise
        an exception if the directory already exists and passes if dirname=""."""
@@ -33,6 +34,20 @@ def makedirs(dirname):
     except OSError as e:
         if e.errno != errno.EEXIST:
             raise
+
+
+def remove_file_with_empty_parents(root, filename):
+    """Remove root/filename, also removing any empty parents up to (but excluding) root"""
+    root = os.path.normpath(root)
+    full_filename = os.path.join(root, filename)
+    if os.path.isfile(full_filename):
+        os.remove(full_filename)
+    parent = os.path.normpath(os.path.dirname(full_filename))
+    while parent != root:
+        if os.listdir(parent):
+            break
+        os.rmdir(parent)
+        parent = os.path.normpath(os.path.dirname(parent))
 
 
 def full_split(filename):
@@ -219,7 +234,8 @@ class LibGit2GitHandler(object):
 
             if not self.repo.is_bare and self.update_working_copy:
                 real_filename = os.path.join(self.path, filename)
-                os.remove(real_filename)
+                remove_file_with_empty_parents(self.path, filename)
+
 
             self.messages.append('    D  {}'.format(filename))
 
@@ -232,6 +248,7 @@ class LibGit2GitHandler(object):
             real_new_filename = os.path.join(self.path, new_filename)
             mkdir_p(os.path.dirname(real_new_filename))
             os.rename(real_old_filename, real_new_filename)
+            remove_file_with_empty_parents(self.path, old_filename)
 
         self.messages.append('    R  {} -> {}'.format(old_filename, new_filename))
 
