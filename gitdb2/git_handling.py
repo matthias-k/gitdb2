@@ -13,6 +13,7 @@ import errno
 from time import sleep
 import warnings
 
+from boltons.fileutils import mkdir_p
 
 try:
     from pygit2 import Repository, GIT_FILEMODE_BLOB, GIT_FILEMODE_TREE, GIT_CHECKOUT_FORCE, Signature, Oid
@@ -156,11 +157,12 @@ def get_tree_entry(repo, tree, filename):
 
 
 class LibGit2GitHandler(object):
-    def __init__(self, path, repo_path=None):
+    def __init__(self, path, repo_path=None, update_working_copy=True):
         self.path = path
         if repo_path is None:
             repo_path = self.path #os.path.join(self.path, 'repository')
         self.repo_path = repo_path
+        self.update_working_copy = update_working_copy
         self.repo = Repository(self.repo_path)
         self.working_tree = self.get_last_tree()
         self.messages = []
@@ -194,17 +196,36 @@ class LibGit2GitHandler(object):
             type = 'A'
         blob_id = self.repo.create_blob(data)
         self.insert_into_working_tree(blob_id, filename)
+
+        if not self.repo.is_bare and self.update_working_copy:
+            real_filename = os.path.join(self.path, filename)
+            mkdir_p(os.path.dirname(real_filename))
+            with codecs.open(real_filename, 'w', encoding='utf-8') as outfile:
+                outfile.write(content)
+
         self.messages.append('    {}  {}'.format(type, filename))
 
     def remove_file(self, filename):
         existing_entry = get_tree_entry(self.repo, self.working_tree, filename)
         if existing_entry:
             self.remove_from_working_tree(filename)
+
+            if not self.repo.is_bare and self.update_working_copy:
+                real_filename = os.path.join(self.path, filename)
+                os.remove(real_filename)
+
             self.messages.append('    D  {}'.format(filename))
 
     def move_file(self, old_filename, new_filename):
         tree_id = move_file_in_tree(self.repo, self.working_tree, old_filename, new_filename)
         self.working_tree = self.repo[tree_id]
+
+        if not self.repo.is_bare and self.update_working_copy:
+            real_old_filename = os.path.join(self.path, old_filename)
+            real_new_filename = os.path.join(self.path, new_filename)
+            mkdir_p(os.path.dirname(real_new_filename))
+            os.rename(real_old_filename, real_new_filename)
+
         self.messages.append('    R  {} -> {}'.format(old_filename, new_filename))
 
     def commit(self):
@@ -227,8 +248,8 @@ class LibGit2GitHandler(object):
                                 parents)
         self.saveCurrentCommit()
         self.messages = []
-        if not self.repo.is_bare:
-            self.repo.checkout_head(strategy=GIT_CHECKOUT_FORCE)
+        #if not self.repo.is_bare:
+        #    self.repo.checkout_head(strategy=GIT_CHECKOUT_FORCE)
 
     def reset(self):
         self.working_tree = self.get_last_tree()

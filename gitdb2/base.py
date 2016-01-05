@@ -322,7 +322,7 @@ class GitDBRepo(object):
                 if klazz.__tablename__ in root_tree:
                     sub_tree = self.repo[root_tree[klazz.__tablename__].id]
                     for tree_entry in sub_tree:
-                        print("Reading blob %s/%s" % (klazz.__tablename__, tree_entry.name))
+                        logging.debug("Reading blob %s/%s" % (klazz.__tablename__, tree_entry.name))
                         text = self.repo[tree_entry.id].data.decode('utf-8')
                         insert_entries.append(construct_insert_values_from_string(klazz, text))
 
