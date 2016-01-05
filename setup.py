@@ -4,7 +4,7 @@
 from distutils.core import setup
 
 setup(name='gitdb2',
-      version='0.1.0',
+      version='0.2.0',
       description='store sqlalchemy database in git repository',
       author='Matthias Kuemmerer',
       author_email='matthias@matthias-k.org',
