@@ -125,7 +125,7 @@ class BaseSessionTest(unittest.TestCase):
         self.Base.metadata.create_all(engine)
         Session = sqlalchemy.orm.sessionmaker(bind=engine)
         self.session = Session()
-        self.GitDBSession = GitDBSession(self.session, self.test_dir, Base=self.Base, async=False)
+        self.GitDBSession = GitDBSession(self.session, self.test_dir, Base=self.Base)
     def newSession(self):
         self.GitDBSession.close()
         self.session.close()
@@ -136,7 +136,7 @@ class BaseSessionTest(unittest.TestCase):
         engine = sqlalchemy.create_engine(enginepath, echo=False)
         Session = sqlalchemy.orm.sessionmaker(bind=engine)
         self.session = Session()
-        self.GitDBSession = GitDBSession(self.session, self.test_dir, Base=self.Base, async=False)
+        self.GitDBSession = GitDBSession(self.session, self.test_dir, Base=self.Base)
     def tearDown(self):
         self.GitDBSession.close()
         #shutil.rmtree(self.test_dir)
@@ -418,13 +418,13 @@ class GitDBRepoTest(unittest.TestCase):
                     self.assertEqual(open(os.path.join(directory, f)).read(), data[f])
         check_directory(self.test_dir, repo_data)
     def initRepo(self):
-        self.repo = GitDBRepo(self.Base, self.test_dir, async=False)
+        self.repo = GitDBRepo(self.Base, self.test_dir)
         self.session = self.repo.session
     def restartRepo(self, reloadDatabase=False):
         self.repo.close()
         if reloadDatabase:
             os.remove(os.path.join(self.test_dir, 'database.db'))
-        self.repo = GitDBRepo(self.Base, self.test_dir, async=False)
+        self.repo = GitDBRepo(self.Base, self.test_dir)
         self.session = self.repo.session
     def tearDown(self):
         self.repo.close()

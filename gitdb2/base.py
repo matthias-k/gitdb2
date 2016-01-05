@@ -79,7 +79,7 @@ def makedirs(dirname):
             raise
 
 class GitDBSession(object):
-    def __init__(self, session, path, Base=None, async=True):
+    def __init__(self, session, path, Base=None, update_working_copy=True):
         #self.logger = logger.getChild('session')
         self.session = session
         self.new = set()
@@ -88,8 +88,7 @@ class GitDBSession(object):
         self.path = path
         self.Base = Base
         self.active=True
-        self.async = async
-        self.git_handler = GitHandler(self.path, async=self.async)
+        self.git_handler = GitHandler(self.path, update_working_copy=update_working_copy)
         event.listen(session, "after_commit", self.after_commit)
         event.listen(session, "after_rollback", self.after_rollback)
         event.listen(session, "after_bulk_delete", self.after_bulk_delete)
@@ -105,7 +104,6 @@ class GitDBSession(object):
                     register_class(sub_klazz)
             register_class(self.Base)
     def close(self):
-        self.git_handler.join()
         self.active=False
 
     def getFilename(self, obj, old=True):
@@ -268,12 +266,12 @@ def construct_insert_values_from_string(klazz, data):
     return values
 
 class GitDBRepo(object):
-    def __init__(self, Base, path, dbname='database.db', async=True):
+    def __init__(self, Base, path, dbname='database.db', update_working_copy=True):
         self.Base = Base
         self.path = path
         self.repo = Repository(self.path)
         self.dbname = dbname
-        self.async = async
+        self.update_working_copy = update_working_copy
         databasepath = os.path.join(self.path, self.dbname)
         if not os.path.exists(databasepath):
             self.startDatabase(refresh=True)
@@ -313,7 +311,7 @@ class GitDBRepo(object):
             logging.info("Reusing database")
         self.gitDBSession = GitDBSession(self.session, self.path,
                                          Base=self.Base,
-                                         async=self.async)
+                                         update_working_copy=self.update_working_copy)
     def setup(self):
         def read_class(klazz):
             insert_entries = []
