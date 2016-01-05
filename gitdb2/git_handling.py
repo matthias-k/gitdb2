@@ -157,7 +157,13 @@ def get_tree_entry(repo, tree, filename):
 
 
 class LibGit2GitHandler(object):
-    def __init__(self, path, repo_path=None, update_working_copy=True):
+    def __init__(self, path, repo_path=None, update_working_copy=False):
+        """
+        Start a git handler in given repository.
+        `update_working_copy`: wether also to update the working copy. By default,
+            the git handler will only work on the git database. Updating the
+            working copy can take a lot of time in large repositories.
+        """
         self.path = path
         if repo_path is None:
             repo_path = self.path #os.path.join(self.path, 'repository')
@@ -202,6 +208,7 @@ class LibGit2GitHandler(object):
             mkdir_p(os.path.dirname(real_filename))
             with codecs.open(real_filename, 'w', encoding='utf-8') as outfile:
                 outfile.write(content)
+            self.repo.index.add(filename)
 
         self.messages.append('    {}  {}'.format(type, filename))
 
@@ -213,6 +220,7 @@ class LibGit2GitHandler(object):
             if not self.repo.is_bare and self.update_working_copy:
                 real_filename = os.path.join(self.path, filename)
                 os.remove(real_filename)
+                self.repo.index.remove(filename)
 
             self.messages.append('    D  {}'.format(filename))
 
@@ -225,6 +233,8 @@ class LibGit2GitHandler(object):
             real_new_filename = os.path.join(self.path, new_filename)
             mkdir_p(os.path.dirname(real_new_filename))
             os.rename(real_old_filename, real_new_filename)
+            self.repo.index.remove(old_filename)
+            self.repo.index.add(new_filename)
 
         self.messages.append('    R  {} -> {}'.format(old_filename, new_filename))
 
@@ -248,6 +258,8 @@ class LibGit2GitHandler(object):
                                 parents)
         self.saveCurrentCommit()
         self.messages = []
+        if not self.repo.is_bare and self.update_working_copy:
+            self.repo.index.write()
         #if not self.repo.is_bare:
         #    self.repo.checkout_head(strategy=GIT_CHECKOUT_FORCE)
 
