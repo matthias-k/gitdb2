@@ -5,6 +5,14 @@ This is a library that extends sqlalchemy databases to store their content in a
 directory of files that is managed by git. This makes synchronizing databases
 much easier.
 
+Installation
+------------
+
+gitdb2 uses [libgit2](https://libgit2.github.com/) via [pygit2](http://www.pygit2.org/) to
+handle the git repository. See [http://www.pygit2.org/install.html] for explanations how to
+install the most recent version of libgit2 and pygit2. All required python packages are listed in
+`requirements.txt`. `gitdb2` is installable via pip or `python setup.py install`.
+
 Example
 -------
 
