@@ -163,6 +163,46 @@ def get_tree_entry(repo, tree, filename):
         return get_tree_entry(repo, sub_tree, sub_filename)
 
 
+class TreeModifier(object):
+    """handles tree modifications of possible large scale"""
+    def __init__(self, repo, tree):
+        self.repo = repo
+        self.tree = tree
+        self.operations = []
+
+    def insert_blob(self, blob_id, filename):
+        self.operations.append(('insert', (blob_id, filename)))
+
+    def remove_blob(self, filename):
+        self.operations.append(('remove', (filename, )))
+
+    def move(self, old_filename, new_filename):
+        self.operations.append(('move', (old_filename, new_filename)))
+
+    def apply(self):
+        working_tree = self.tree
+        for operation, args in self.operations:
+            if operation == 'insert':
+                blob_id, filename = args
+                working_tree_id = insert_blob_into_tree(self.repo, working_tree,
+                                                        blob_id, filename)
+                working_tree = self.repo[working_tree_id]
+            elif operation == 'remove':
+                filename, = args
+                working_tree_id = remove_file_from_tree(self.repo, working_tree,
+                                                        filename)
+                working_tree = self.repo[working_tree_id]
+            elif operation == 'move':
+                old_filename, new_filename = args
+                working_tree_id = move_file_in_tree(self.repo, working_tree,
+                                                    old_filename, new_filename)
+                working_tree = self.repo[working_tree_id]
+            else:
+                raise ValueError(operation)
+
+        return working_tree
+
+
 class GitHandler(object):
     def __init__(self, path, repo_path=None, update_working_copy=True):
         """
@@ -179,6 +219,7 @@ class GitHandler(object):
         self.update_working_copy = update_working_copy
         self.repo = Repository(self.repo_path)
         self.working_tree = self.get_last_tree()
+        self.tree_modifier = TreeModifier(self.repo, self.working_tree)
         self.messages = []
         print("Started libgit2 git handler in ", self.path)
 
@@ -190,13 +231,15 @@ class GitHandler(object):
         return commit.tree
 
     def insert_into_working_tree(self, blob_id, filename):
-        tree_id = insert_blob_into_tree(self.repo, self.working_tree, blob_id,
-                                        filename)
-        self.working_tree = self.repo[tree_id]
+        #tree_id = insert_blob_into_tree(self.repo, self.working_tree, blob_id,
+        #                                filename)
+        #self.working_tree = self.repo[tree_id]
+        self.tree_modifier.insert_blob(blob_id, filename)
 
     def remove_from_working_tree(self, filename):
-        tree_id = remove_file_from_tree(self.repo, self.working_tree, filename)
-        self.working_tree = self.repo[tree_id]
+        #tree_id = remove_file_from_tree(self.repo, self.working_tree, filename)
+        #self.working_tree = self.repo[tree_id]
+        self.tree_modifier.remove_blob(filename)
 
     def write_file(self, filename, content):
         # TODO: combine writing many files
@@ -231,9 +274,10 @@ class GitHandler(object):
             self.messages.append('    D  {}'.format(filename))
 
     def move_file(self, old_filename, new_filename):
-        tree_id = move_file_in_tree(self.repo, self.working_tree,
-                                    old_filename, new_filename)
-        self.working_tree = self.repo[tree_id]
+        #tree_id = move_file_in_tree(self.repo, self.working_tree,
+        #                            old_filename, new_filename)
+        #self.working_tree = self.repo[tree_id]
+        self.tree_modifier.move(old_filename, new_filename)
 
         if not self.repo.is_bare and self.update_working_copy:
             real_old_filename = os.path.join(self.path, old_filename)
@@ -246,6 +290,9 @@ class GitHandler(object):
                                                       new_filename))
 
     def commit(self):
+        self.working_tree = self.tree_modifier.apply()
+        self.tree_modifier = TreeModifier(self.repo, self.working_tree)
+
         if self.repo.head_is_unborn:
             parents = []
         else:
@@ -271,6 +318,7 @@ class GitHandler(object):
 
     def reset(self):
         self.working_tree = self.get_last_tree()
+        self.tree_modifier = TreeModifier(self.repo, self.working_tree)
         self.messages = []
 
     def getCurrentCommit(self):
