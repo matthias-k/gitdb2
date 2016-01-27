@@ -1,32 +1,25 @@
-from __future__ import print_function, division, absolute_import, unicode_literals
+from __future__ import print_function, division, absolute_import, \
+    unicode_literals
 
-from six.moves.queue import Queue, Empty
-from six import text_type, binary_type
-
-from threading import Thread, Event
-import signal
+from six import text_type
 
 import os
 import codecs
-import subprocess as sp
 import errno
-from time import sleep
-import warnings
 
 from boltons.fileutils import mkdir_p
 
-try:
-    from pygit2 import Repository, GIT_FILEMODE_BLOB, GIT_FILEMODE_TREE, GIT_CHECKOUT_FORCE, Signature, Oid
-    from pygit2 import hash as git_hash
+from pygit2 import Repository, GIT_FILEMODE_BLOB, GIT_FILEMODE_TREE, \
+    Signature, Oid
+from pygit2 import hash as git_hash
 
-    empty_tree_id = Oid(hex='4b825dc642cb6eb9a060e54bf8d69288fbee4904')
-except ImportError:
-    print("Could not import pygit2, trying without it")
+empty_tree_id = Oid(hex='4b825dc642cb6eb9a060e54bf8d69288fbee4904')
 
 
 def makedirs(dirname):
     """Creates the directories for dirname via os.makedirs, but does not raise
-       an exception if the directory already exists and passes if dirname=""."""
+       an exception if the directory already exists and passes if dirname="".
+    """
     if not dirname:
         return
     try:
@@ -37,7 +30,8 @@ def makedirs(dirname):
 
 
 def remove_file_with_empty_parents(root, filename):
-    """Remove root/filename, also removing any empty parents up to (but excluding) root"""
+    """Remove root/filename, also removing any empty parents
+       up to (but excluding) root"""
     root = os.path.normpath(root)
     full_filename = os.path.join(root, filename)
     if os.path.isfile(full_filename):
@@ -67,7 +61,7 @@ def insert_into_tree(repo, tree, filename, oid, attr):
     parts = full_split(filename)
     assert len(parts) > 0
     if len(parts) > 1:
-        #Create or get tree
+        # Create or get tree
         sub_directory = parts[0]
         sub_filename = os.path.join(*parts[1:])
         if tree is not None and sub_directory in tree:
@@ -120,19 +114,18 @@ def remove_file_from_tree(repo, tree, filename):
             return tree.id
         sub_tree = repo[sub_tree_entry.id]
         new_sub_tree_id = remove_file_from_tree(repo, sub_tree, sub_filename)
-        new_sub_tree = repo[new_sub_tree_id]
 
         if new_sub_tree_id == empty_tree_id:
             filename = sub_directory
         else:
-            tree_builder.insert(sub_directory, new_sub_tree_id, GIT_FILEMODE_TREE)
+            tree_builder.insert(sub_directory, new_sub_tree_id,
+                                GIT_FILEMODE_TREE)
             filename = None
 
     # remove from this tree
     if filename and tree_builder.get(filename):
         tree_builder.remove(filename)
     new_tree_id = tree_builder.write()
-    new_tree = repo[new_tree_id]
     return new_tree_id
 
 
@@ -147,7 +140,6 @@ def move_file_in_tree(repo, tree, old_filename, new_filename):
     new_tree_id = remove_file_from_tree(repo, tree, old_filename)
     new_tree = repo[new_tree_id]
     new_tree_id = insert_into_tree(repo, new_tree, new_filename, oid, filemode)
-    #new_tree = repo[new_tree_id]
 
     return new_tree_id
 
@@ -175,13 +167,14 @@ class GitHandler(object):
     def __init__(self, path, repo_path=None, update_working_copy=True):
         """
         Start a git handler in given repository.
-        `update_working_copy`: wether also to update the working copy. By default,
-            the git handler will only work on the git database. Updating the
-            working copy can take a lot of time in large repositories.
+        `update_working_copy`: wether also to update the working copy.
+            By default, the git handler will only work on the git database.
+            Updating the working copy can take a lot of time in
+            large repositories.
         """
         self.path = path
         if repo_path is None:
-            repo_path = self.path #os.path.join(self.path, 'repository')
+            repo_path = self.path
         self.repo_path = repo_path
         self.update_working_copy = update_working_copy
         self.repo = Repository(self.repo_path)
@@ -197,7 +190,8 @@ class GitHandler(object):
         return commit.tree
 
     def insert_into_working_tree(self, blob_id, filename):
-        tree_id = insert_blob_into_tree(self.repo, self.working_tree, blob_id, filename)
+        tree_id = insert_blob_into_tree(self.repo, self.working_tree, blob_id,
+                                        filename)
         self.working_tree = self.repo[tree_id]
 
     def remove_from_working_tree(self, filename):
@@ -223,7 +217,6 @@ class GitHandler(object):
             mkdir_p(os.path.dirname(real_filename))
             with codecs.open(real_filename, 'w', encoding='utf-8') as outfile:
                 outfile.write(content)
-            #self.repo.index.add(filename)
 
         self.messages.append('    {}  {}'.format(type, filename))
 
@@ -233,14 +226,13 @@ class GitHandler(object):
             self.remove_from_working_tree(filename)
 
             if not self.repo.is_bare and self.update_working_copy:
-                real_filename = os.path.join(self.path, filename)
                 remove_file_with_empty_parents(self.path, filename)
-
 
             self.messages.append('    D  {}'.format(filename))
 
     def move_file(self, old_filename, new_filename):
-        tree_id = move_file_in_tree(self.repo, self.working_tree, old_filename, new_filename)
+        tree_id = move_file_in_tree(self.repo, self.working_tree,
+                                    old_filename, new_filename)
         self.working_tree = self.repo[tree_id]
 
         if not self.repo.is_bare and self.update_working_copy:
@@ -250,7 +242,8 @@ class GitHandler(object):
             os.rename(real_old_filename, real_new_filename)
             remove_file_with_empty_parents(self.path, old_filename)
 
-        self.messages.append('    R  {} -> {}'.format(old_filename, new_filename))
+        self.messages.append('    R  {} -> {}'.format(old_filename,
+                                                      new_filename))
 
     def commit(self):
         if self.repo.head_is_unborn:
@@ -273,14 +266,8 @@ class GitHandler(object):
         self.saveCurrentCommit()
         self.messages = []
         if not self.repo.is_bare and self.update_working_copy:
-            #print("reading index from tree")
-            # This takes a long time on a large repository.
             self.repo.index.read_tree(self.working_tree)
-            #print("writing index")
             self.repo.index.write()
-            #print("Done")
-        #if not self.repo.is_bare:
-        #    self.repo.checkout_head(strategy=GIT_CHECKOUT_FORCE)
 
     def reset(self):
         self.working_tree = self.get_last_tree()
