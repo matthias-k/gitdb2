@@ -179,28 +179,82 @@ class TreeModifier(object):
     def move(self, old_filename, new_filename):
         self.operations.append(('move', (old_filename, new_filename)))
 
-    def apply(self):
-        working_tree = self.tree
+    def simplify(self):
+        """Convert list of operations into nested dictionaries of
+           blob_ids to insert/remove by directory
+        """
+        todo = {}
         for operation, args in self.operations:
             if operation == 'insert':
                 blob_id, filename = args
-                working_tree_id = insert_blob_into_tree(self.repo, working_tree,
-                                                        blob_id, filename)
-                working_tree = self.repo[working_tree_id]
+                todo[filename] = blob_id
             elif operation == 'remove':
                 filename, = args
-                working_tree_id = remove_file_from_tree(self.repo, working_tree,
-                                                        filename)
-                working_tree = self.repo[working_tree_id]
+                todo[filename] = None
             elif operation == 'move':
                 old_filename, new_filename = args
-                working_tree_id = move_file_in_tree(self.repo, working_tree,
-                                                    old_filename, new_filename)
-                working_tree = self.repo[working_tree_id]
+                if old_filename in todo:
+                    blob_id = todo[old_filename]
+                    if blob_id is None:
+                        raise Exception('Trying to move deleted file',
+                                        old_filename, new_filename)
+                else:
+                    blob_id = get_tree_entry(self.repo, self.tree,
+                                             old_filename)
+                    if blob_id is None:
+                        raise Exception('Trying to move non existant file',
+                                        old_filename, new_filename)
+                todo[old_filename] = None
+                todo[new_filename] = blob_id
             else:
                 raise ValueError(operation)
 
-        return working_tree
+        todo_by_directory = {}
+        for filename, blob_id in todo.items():
+            parts = full_split(filename)
+            directories = parts[:-1]
+            filename = parts[-1]
+            directory = todo_by_directory
+            for d in directories:
+                directory = directory.setdefault(d, {})
+                assert isinstance(directory, dict)
+            directory[filename] = blob_id
+
+        return todo_by_directory
+
+    def update_tree(self, repo, tree, todo):
+        """Apply nested list of new blob_ids from `simplify` to a tree
+        """
+        if tree is None:
+            tree_builder = repo.TreeBuilder()
+        else:
+            tree_builder = repo.TreeBuilder(tree)
+
+        for key, value in todo.items():
+            if value is None:
+                # Remove
+                tree_builder.remove(key)
+            elif isinstance(value, dict):
+                # subdirectory
+                sub_tree_entry = tree_builder.get(key)
+                if not sub_tree_entry:
+                    sub_tree = None
+                else:
+                    sub_tree = repo[sub_tree_entry.id]
+
+                new_subtree_id = self.update_tree(repo, sub_tree, value)
+                tree_builder.insert(key, new_subtree_id, GIT_FILEMODE_TREE)
+            else:
+                # Blob
+                tree_builder.insert(key, value, GIT_FILEMODE_BLOB)
+        new_tree_id = tree_builder.write()
+        return new_tree_id
+
+    def apply(self):
+        todo = self.simplify()
+        new_tree_id = self.update_tree(self.repo, self.tree, todo)
+        new_tree = self.repo[new_tree_id]
+        return new_tree
 
 
 class GitHandler(object):
@@ -231,14 +285,9 @@ class GitHandler(object):
         return commit.tree
 
     def insert_into_working_tree(self, blob_id, filename):
-        #tree_id = insert_blob_into_tree(self.repo, self.working_tree, blob_id,
-        #                                filename)
-        #self.working_tree = self.repo[tree_id]
         self.tree_modifier.insert_blob(blob_id, filename)
 
     def remove_from_working_tree(self, filename):
-        #tree_id = remove_file_from_tree(self.repo, self.working_tree, filename)
-        #self.working_tree = self.repo[tree_id]
         self.tree_modifier.remove_blob(filename)
 
     def write_file(self, filename, content):
@@ -274,9 +323,6 @@ class GitHandler(object):
             self.messages.append('    D  {}'.format(filename))
 
     def move_file(self, old_filename, new_filename):
-        #tree_id = move_file_in_tree(self.repo, self.working_tree,
-        #                            old_filename, new_filename)
-        #self.working_tree = self.repo[tree_id]
         self.tree_modifier.move(old_filename, new_filename)
 
         if not self.repo.is_bare and self.update_working_copy:
