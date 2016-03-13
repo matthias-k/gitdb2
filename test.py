@@ -242,7 +242,7 @@ class BaseSessionTest(unittest.TestCase):
         test.id2 = 20
         self.session.add(test)
         self.session.commit()
-        self.check_repository({'test': {'10,20.txt': "id1: 10\nid2: 20\n"}})
+        self.check_repository({'test': {'10': {'10,20.txt': "id1: 10\nid2: 20\n"}}})
     def test_change_primary_key(self):
         class Test(self.Base):
             __tablename__ = 'test'
@@ -452,6 +452,24 @@ class GitDBRepoTest(unittest.TestCase):
         self.session.add(test)
         self.session.commit()
         self.check_repository({'test': {'1.txt': "id: 1\nfoo: probe\n"}})
+        self.restartRepo(reloadDatabase=False)
+        test = self.session.query(Test).one()
+        self.assertEqual(test.foo, 'probe')
+        self.restartRepo(reloadDatabase=True)
+        test = self.session.query(Test).one()
+        self.assertEqual(test.foo, 'probe')
+    def test_add_object_long_primary(self):
+        class Test(self.Base):
+            __tablename__ = 'test'
+            id = Column(String, primary_key = True)
+            foo = Column(String)
+        self.initRepo()
+        test = Test()
+        test.foo = 'probe'
+        test.id = 'abcdefghijk'
+        self.session.add(test)
+        self.session.commit()
+        self.check_repository({'test': {'ab': {'abcdefghijk.txt': "id: abcdefghijk\nfoo: probe\n"}}})
         self.restartRepo(reloadDatabase=False)
         test = self.session.query(Test).one()
         self.assertEqual(test.foo, 'probe')

@@ -14,7 +14,7 @@ from time import sleep
 
 from .data_types import TypeManager
 from .git_handling import GitHandler
-from pygit2 import Repository
+from pygit2 import Repository, Tree, GIT_FILEMODE_BLOB, GIT_FILEMODE_TREE
 
 import logging
 logger = logging.getLogger(__name__)
@@ -65,6 +65,16 @@ logger.setLevel(logging.INFO)
   #encoding='cp852')
 #console.setFormatter(formatter)
 #logger.addHandler(console)
+
+
+def get_filename(tablename, primary_key):
+    primary_key_name = str(primary_key)
+    if len(primary_key_name) > 3:
+        prefix = primary_key_name[:2]
+        return '{0}/{1}/{2}.txt'.format(tablename, prefix, primary_key_name)
+    else:
+        return '{0}/{1}.txt'.format(tablename, primary_key_name)
+
 
 
 def makedirs(dirname):
@@ -121,8 +131,8 @@ class GitDBSession(object):
                 primary_keys.append(str(getattr(obj, name)))
         oldprimarykey = ','.join(old_primary_keys)
         primarykey = ','.join(primary_keys)
-        filename = '{0}/{1}.txt'.format(obj.__tablename__, primarykey)
-        oldfilename = '{0}/{1}.txt'.format(obj.__tablename__, oldprimarykey)
+        filename = get_filename(obj.__tablename__, primarykey)
+        oldfilename = get_filename(obj.__tablename__, oldprimarykey)
         if old:
             return filename, oldfilename
         else:
@@ -319,11 +329,17 @@ class GitDBRepo(object):
                 root_tree = self.repo[self.repo.head.target].tree
                 if klazz.__tablename__ in root_tree:
                     sub_tree = self.repo[root_tree[klazz.__tablename__].id]
-                    for tree_entry in sub_tree:
-                        logging.debug("Reading blob %s/%s" % (klazz.__tablename__, tree_entry.name))
-                        text = self.repo[tree_entry.id].data.decode('utf-8')
-                        insert_entries.append(construct_insert_values_from_string(klazz, text))
-
+                    def read_sub_tree(sub_tree):
+                        for tree_entry in sub_tree:
+                            #print(tree_entry, tree_entry.type, type(tree_entry.type), tree_entry.file)
+                            if tree_entry.type == 'tree':
+                                sub_sub_tree = self.repo[tree_entry.id]
+                                read_sub_tree(sub_sub_tree)
+                            else:
+                                logging.debug("Reading blob %s/%s" % (klazz.__tablename__, tree_entry.name))
+                                text = self.repo[tree_entry.id].data.decode('utf-8')
+                                insert_entries.append(construct_insert_values_from_string(klazz, text))
+                    read_sub_tree(sub_tree)
                     if insert_entries:
                         self.session.execute(klazz.__table__.insert(), insert_entries)
             for sub_klazz in klazz.__subclasses__():
