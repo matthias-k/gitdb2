@@ -336,6 +336,8 @@ class GitHandler(object):
                                                       new_filename))
 
     def commit(self):
+        if self.tree_modifier.tree.oid != self.get_last_tree().oid:
+            raise Exception("The repository was modified outside of this process. For safety reasons, we cannot commit!")
         self.working_tree = self.tree_modifier.apply()
         self.tree_modifier = TreeModifier(self.repo, self.working_tree)
 
