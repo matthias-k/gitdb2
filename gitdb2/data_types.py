@@ -37,6 +37,15 @@ class Integer(AbstractType):
         return int(value)
 TypeManager.register_type(sa.Integer, Integer)
 
+class Float(AbstractType):
+    @staticmethod
+    def to_string(value):
+        return str(value)
+    @staticmethod
+    def from_string(value):
+        return float(value)
+TypeManager.register_type(sa.Float, Float)
+
 class DateTime(AbstractType):
     @staticmethod
     def to_string(value):
